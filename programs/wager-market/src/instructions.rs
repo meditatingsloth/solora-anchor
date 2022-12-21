@@ -1,6 +1,10 @@
 mod create_event;
+mod create_order;
+mod fill_order;
 
 pub use create_event::*;
+pub use create_order::*;
+pub use fill_order::*;
 
 /*
 mod swap;

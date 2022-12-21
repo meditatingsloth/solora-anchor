@@ -22,4 +22,21 @@ pub mod wager_market {
         instructions::create_event(ctx, id, metadata_uri)
     }
 
+    pub fn create_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, CreateOrder<'info>>,
+        outcome: u8,
+        bet_amount: u64,
+        ask_bps: u32,
+    ) -> Result<()> {
+        instructions::create_order(ctx, outcome, bet_amount, ask_bps)
+    }
+
+    pub fn fill_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, FillOrder<'info>>,
+        outcome: u8,
+        fill_amount: u64
+    ) -> Result<()> {
+        instructions::fill_order(ctx, outcome, fill_amount)
+    }
+
 }

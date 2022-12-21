@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 32 + 32 + (4 + 200);
+pub const EVENT_SIZE: usize = 8 + 1 + 32 + 32 + 1 + (4 + 200);
 
 #[account]
 pub struct Event {
@@ -10,10 +10,13 @@ pub struct Event {
     pub authority: Pubkey,
     // Bytes generated from sha256 of the event description
     pub id: [u8; 32],
+    pub is_settled: bool,
     pub metadata_uri: String,
 }
 
-#[account(zero_copy)]
+pub const ORDER_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 8 + 4 + 4;
+
+#[account]
 pub struct Order {
     /// Bump seed used to generate the program address / authority
     pub bump: [u8; 1],
@@ -22,10 +25,18 @@ pub struct Order {
     pub outcome: u8,
     pub bet_amount: u64,
     pub ask_bps: u32,
-    pub fills: [Fill; 100]
+    pub fills: Vec<Fill>
 }
 
-#[zero_copy]
+impl Order {
+    pub fn space(fill_len: usize) -> usize {
+        ORDER_SIZE + (fill_len * FILL_SIZE)
+    }
+}
+
+pub const FILL_SIZE: usize = 32 + 1 + 8;
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct Fill {
     pub authority: Pubkey,
     pub outcome: u8,
