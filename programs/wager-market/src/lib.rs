@@ -27,8 +27,9 @@ pub mod wager_market {
         outcome: u8,
         bet_amount: u64,
         ask_bps: u32,
+        expiry: Option<i64>
     ) -> Result<()> {
-        instructions::create_order(ctx, outcome, bet_amount, ask_bps)
+        instructions::create_order(ctx, outcome, bet_amount, ask_bps, expiry)
     }
 
     pub fn fill_order<'info>(

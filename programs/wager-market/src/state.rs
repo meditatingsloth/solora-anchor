@@ -15,7 +15,7 @@ pub struct Event {
     pub metadata_uri: String,
 }
 
-pub const ORDER_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 8 + 4 + 4;
+pub const ORDER_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 8 + 4 + 8 + 4;
 
 #[account]
 pub struct Order {
@@ -26,6 +26,8 @@ pub struct Order {
     pub outcome: u8,
     pub bet_amount: u64,
     pub ask_bps: u32,
+    // Expires any remaining bet_amount after this timestamp or -1 if never expires
+    pub expiry: i64,
     pub fills: Vec<Fill>
 }
 

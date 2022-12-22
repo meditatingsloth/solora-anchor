@@ -3,7 +3,7 @@ import { WagerMarket } from "../target/types/wager_market";
 import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
-import {createMint} from "@solana/spl-token";
+import {ASSOCIATED_TOKEN_PROGRAM_ID, createMint, getAssociatedTokenAddress, TOKEN_PROGRAM_ID} from "@solana/spl-token";
 import { v4 as uuidv4 } from 'uuid';
 
 describe("wager-market", async () => {
@@ -17,6 +17,7 @@ describe("wager-market", async () => {
 	let eventId: number[];
 	let metadataUri: string;
 	let event: PublicKey;
+	let escrow: PublicKey;
 	let order: PublicKey;
 
 	const payer = anchor.web3.Keypair.generate();
@@ -72,10 +73,23 @@ describe("wager-market", async () => {
 			.signers([eventAuthority])
 
 		if (currencyMint) {
+			escrow = await getAssociatedTokenAddress(currencyMint, event, true)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
 				pubkey: currencyMint,
+			}, {
+				isWritable: true,
+				isSigner: false,
+				pubkey: escrow,
+			}, {
+				isWritable: false,
+				isSigner: false,
+				pubkey: TOKEN_PROGRAM_ID,
+			}, {
+				isWritable: false,
+				isSigner: false,
+				pubkey: ASSOCIATED_TOKEN_PROGRAM_ID,
 			}])
 		}
 
@@ -138,7 +152,7 @@ describe("wager-market", async () => {
 			assert.equal(fetchedEvent.currencyMint.toBase58(), PublicKey.default.toBase58());
 		});
 
-		it("should create an event with alt currency", async () => {
+		it("ab should create an event with alt currency", async () => {
 			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
 			await createEvent(currencyMint)
 
