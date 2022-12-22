@@ -1,32 +1,35 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 32 + (4 + 200);
+pub const EVENT_SIZE: usize = 8 + 1 + 4 + 32 + 32 + 1 + 32 + (4 + 200);
 
 #[account]
 pub struct Event {
     /// Bump seed used to generate the program address / authority
     pub bump: [u8; 1],
+    /// Index to use for the next order created on this event
+    pub order_index: u32,
     pub authority: Pubkey,
-    // Bytes generated from sha256 of the event description
+    /// Bytes generated from sha256 of the event description
     pub id: [u8; 32],
     pub is_settled: bool,
     pub currency_mint: Pubkey,
     pub metadata_uri: String,
 }
 
-pub const ORDER_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 8 + 4 + 8 + 4;
+pub const ORDER_SIZE: usize = 8 + 1 + 4 + 32 + 32 + 1 + 8 + 4 + 8 + 4;
 
 #[account]
 pub struct Order {
     /// Bump seed used to generate the program address / authority
     pub bump: [u8; 1],
+    pub index: u32,
     pub authority: Pubkey,
     pub event: Pubkey,
     pub outcome: u8,
     pub bet_amount: u64,
     pub ask_bps: u32,
-    // Expires any remaining bet_amount after this timestamp or -1 if never expires
+    /// Expires any remaining bet_amount after this timestamp or -1 if never expires
     pub expiry: i64,
     pub fills: Vec<Fill>
 }
@@ -34,6 +37,10 @@ pub struct Order {
 impl Order {
     pub fn space(fill_len: usize) -> usize {
         ORDER_SIZE + (fill_len * FILL_SIZE)
+    }
+
+    pub fn get_fill_index(&self, authority: Pubkey) -> Option<usize> {
+        self.fills.iter().position(|fill| fill.authority == authority)
     }
 }
 

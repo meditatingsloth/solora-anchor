@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use std::mem::size_of;
 use anchor_spl::token::TokenAccount;
 use crate::state::{Event, EVENT_SIZE};
 use crate::error::Error;

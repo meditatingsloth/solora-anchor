@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum Error {
+    /// 0
     #[msg("Event has already been settled")]
     EventSettled,
     #[msg("An invalid outcome was chosen")]
@@ -11,5 +12,11 @@ pub enum Error {
     #[msg("The fill amount is too large")]
     FillAmountTooLarge,
     #[msg("The expiry date has passed")]
-    InvalidExpiry
+    InvalidExpiry,
+
+    /// 5
+    #[msg("The order has expired")]
+    OrderExpired,
+    #[msg("The user already has an existing fill for this order")]
+    UserAlreadyFilled,
 }

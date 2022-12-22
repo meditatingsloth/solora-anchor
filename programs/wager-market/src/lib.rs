@@ -34,10 +34,11 @@ pub mod wager_market {
 
     pub fn fill_order<'info>(
         ctx: Context<'_, '_, '_, 'info, FillOrder<'info>>,
+        index: u32,
         outcome: u8,
         fill_amount: u64
     ) -> Result<()> {
-        instructions::fill_order(ctx, outcome, fill_amount)
+        instructions::fill_order(ctx, index, outcome, fill_amount)
     }
 
 }
