@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 32 + 32 + 1 + (4 + 200);
+pub const EVENT_SIZE: usize = 8 + 1 + 32 + 32 + 1 + 32 + (4 + 200);
 
 #[account]
 pub struct Event {
@@ -11,6 +11,7 @@ pub struct Event {
     // Bytes generated from sha256 of the event description
     pub id: [u8; 32],
     pub is_settled: bool,
+    pub currency_mint: Pubkey,
     pub metadata_uri: String,
 }
 

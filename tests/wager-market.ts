@@ -3,6 +3,8 @@ import { WagerMarket } from "../target/types/wager_market";
 import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
+import {createMint} from "@solana/spl-token";
+import { v4 as uuidv4 } from 'uuid';
 
 describe("wager-market", async () => {
 
@@ -51,22 +53,33 @@ describe("wager-market", async () => {
 		assert.isTrue(throws, 'Expected error to be thrown')
 	}
 
-	async function createEvent() {
+	async function createEvent(currencyMint?: PublicKey) {
 		metadataUri = "https://example.com";
-		eventId = Array.from(sha256("Test event"));
+		eventId = Array.from(sha256(uuidv4()));
 
 		[event] = PublicKey.findProgramAddressSync(
 			[Buffer.from("event"), Buffer.from(eventId)],
 			program.programId
 		);
 
-		await program.methods.createEvent(eventId, metadataUri)
+		const builder = program.methods.createEvent(eventId, metadataUri)
 			.accounts({
 				authority: eventAuthority.publicKey,
 				event,
 				systemProgram: anchor.web3.SystemProgram.programId,
 				rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-			}).signers([eventAuthority]).rpc();
+			})
+			.signers([eventAuthority])
+
+		if (currencyMint) {
+			builder.remainingAccounts([{
+				isWritable: false,
+				isSigner: false,
+				pubkey: currencyMint,
+			}])
+		}
+
+		await builder.rpc();
 	}
 
 	async function createOrder(outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000) {
@@ -122,6 +135,21 @@ describe("wager-market", async () => {
 				Buffer.from(eventId).toString('hex')
 			);
 			assert.equal(fetchedEvent.metadataUri, metadataUri);
+			assert.equal(fetchedEvent.currencyMint.toBase58(), PublicKey.default.toBase58());
+		});
+
+		it("should create an event with alt currency", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			await createEvent(currencyMint)
+
+			let fetchedEvent = await program.account.event.fetch(event);
+			assert.equal(fetchedEvent.authority.toBase58(), eventAuthority.publicKey.toBase58());
+			assert.equal(
+				Buffer.from(fetchedEvent.id).toString('hex'),
+				Buffer.from(eventId).toString('hex')
+			);
+			assert.equal(fetchedEvent.metadataUri, metadataUri);
+			assert.equal(fetchedEvent.currencyMint.toBase58(), currencyMint.toBase58());
 		});
 
 	});
