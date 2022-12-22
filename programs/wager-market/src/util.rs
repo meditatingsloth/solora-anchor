@@ -45,7 +45,7 @@ pub fn transfer_sol<'a>(
     from: &AccountInfo<'a>,
     to: &AccountInfo<'a>,
     system_program: &AccountInfo<'a>,
-    signer_seeds: &[&[u8]],
+    signer_seeds: Option<&[&[u8]]>,
     amount: u64,
 ) -> Result<()> {
     Ok(transfer(
@@ -78,7 +78,7 @@ pub fn transfer<'a>(
     token_program: Option<&AccountInfo<'a>>,
     system_program: &AccountInfo<'a>,
     rent: Option<&AccountInfo<'a>>,
-    signer_seeds: &[&[u8]],
+    signer_seeds: Option<&[&[u8]]>,
     fee_payer_seeds: Option<&[&[u8]]>,
     amount: u64,
 ) -> Result<()> {
@@ -89,30 +89,41 @@ pub fn transfer<'a>(
     };
 
     if is_native {
-        invoke_signed(
-            &system_instruction::transfer(
-                from.key,
-                to.key,
-                amount,
-            ),
-            &[
-                from.clone(),
-                to.clone(),
-                system_program.clone(),
-            ],
-            &[signer_seeds],
-        )?;
+        let transfer_ix = &system_instruction::transfer(
+            from.key,
+            to.key,
+            amount,
+        );
+
+        let transfer_accounts = &[
+            from.clone(),
+            to.clone(),
+            system_program.clone(),
+        ];
+
+        if signer_seeds.is_some() {
+            invoke_signed(
+                transfer_ix,
+                transfer_accounts,
+                &[signer_seeds.unwrap()],
+            )?;
+        } else {
+            invoke(
+                transfer_ix,
+                transfer_accounts,
+            )?;
+        }
     } else {
         let from_currency_account = from_currency_account.unwrap();
         let to_currency_account = to_currency_account.unwrap();
         let currency_mint = currency_mint.unwrap();
-        let fee_payer = fee_payer.unwrap();
-        let ata_program = ata_program.unwrap();
         let token_program = token_program.unwrap();
-        let rent = rent.unwrap();
-        let fee_payer_seeds = fee_payer_seeds.unwrap();
 
         if to_currency_account.data_is_empty() {
+            let fee_payer = fee_payer.unwrap();
+            let ata_program = ata_program.unwrap();
+            let rent = rent.unwrap();
+            let fee_payer_seeds = fee_payer_seeds.unwrap();
             make_ata(
                 to_currency_account.to_account_info(),
                 to.to_account_info(),
@@ -125,29 +136,41 @@ pub fn transfer<'a>(
                 fee_payer_seeds,
             )?;
         }
+
         assert_is_ata(
             to_currency_account,
             to.key,
             &currency_mint.key(),
         )?;
 
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                token_program.key,
-                from_currency_account.key,
-                to_currency_account.key,
-                from.key,
-                &[],
-                amount,
-            )?,
-            &[
-                token_program.clone(),
-                from_currency_account.clone(),
-                to_currency_account.clone(),
-                from.clone(),
-            ],
-            &[signer_seeds],
+        let transfer_ix = &spl_token::instruction::transfer(
+            token_program.key,
+            from_currency_account.key,
+            to_currency_account.key,
+            from.key,
+            &[],
+            amount,
         )?;
+
+        let transfer_accounts = &[
+            token_program.clone(),
+            from_currency_account.clone(),
+            to_currency_account.clone(),
+            from.clone(),
+        ];
+
+        if signer_seeds.is_some() {
+            invoke_signed(
+                transfer_ix,
+                transfer_accounts,
+                &[signer_seeds.unwrap()],
+            )?;
+        } else {
+            invoke(
+                transfer_ix,
+                transfer_accounts,
+            )?;
+        }
     }
 
     Ok(())

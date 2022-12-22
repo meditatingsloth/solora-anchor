@@ -3,8 +3,15 @@ import { WagerMarket } from "../target/types/wager_market";
 import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
-import {ASSOCIATED_TOKEN_PROGRAM_ID, createMint, getAssociatedTokenAddress, TOKEN_PROGRAM_ID} from "@solana/spl-token";
+import {
+	ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccount,
+	createMint, getAccount,
+	getAssociatedTokenAddress,
+	getAssociatedTokenAddressSync, mintTo,
+	TOKEN_PROGRAM_ID
+} from "@solana/spl-token";
 import { v4 as uuidv4 } from 'uuid';
+import moment from "moment";
 
 describe("wager-market", async () => {
 
@@ -37,7 +44,7 @@ describe("wager-market", async () => {
 		return crypto.createHash('sha256').update(str).digest();
 	}
 
-	async function assertThrows(fn: () => Promise<any>, code?: number, message?: string) {
+	async function assertThrows(fn: () => Promise<any | void>, code?: number, message?: string) {
 		let throws = false
 		try {
 			await fn()
@@ -73,7 +80,7 @@ describe("wager-market", async () => {
 			.signers([eventAuthority])
 
 		if (currencyMint) {
-			escrow = await getAssociatedTokenAddress(currencyMint, event, true)
+			escrow = getAssociatedTokenAddressSync(currencyMint, event, true)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
@@ -96,23 +103,47 @@ describe("wager-market", async () => {
 		await builder.rpc();
 	}
 
-	async function createOrder(outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000) {
+	async function createOrder(outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000, expiry?: Date, currencyMint?: PublicKey) {
 		[order] = PublicKey.findProgramAddressSync(
 			[Buffer.from("order"), event.toBuffer(), user.publicKey.toBuffer()],
 			program.programId
 		);
 
-		await program.methods.createOrder(
+		const builder = program.methods.createOrder(
 			outcome,
 			new anchor.BN(betAmount),
-			askBps
+			askBps,
+			expiry ? new anchor.BN(Math.floor(expiry.getTime() / 1000)) : null,
 		).accounts({
 			authority: user.publicKey,
 			order,
 			event,
 			systemProgram: anchor.web3.SystemProgram.programId,
 			rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-		}).signers([user]).rpc();
+		}).signers([user])
+
+		if (currencyMint) {
+			escrow = getAssociatedTokenAddressSync(currencyMint, event, true)
+			builder.remainingAccounts([{
+				isWritable: false,
+				isSigner: false,
+				pubkey: currencyMint,
+			}, {
+				isWritable: true,
+				isSigner: false,
+				pubkey: escrow,
+			}, {
+				isWritable: true,
+				isSigner: false,
+				pubkey: getAssociatedTokenAddressSync(currencyMint, user.publicKey),
+			},{
+				isWritable: false,
+				isSigner: false,
+				pubkey: TOKEN_PROGRAM_ID,
+			}])
+		}
+
+		await builder.rpc();
 	}
 
 	async function fillOrder(outcome=0, fillAmount=LAMPORTS_PER_SOL) {
@@ -152,7 +183,7 @@ describe("wager-market", async () => {
 			assert.equal(fetchedEvent.currencyMint.toBase58(), PublicKey.default.toBase58());
 		});
 
-		it("ab should create an event with alt currency", async () => {
+		it("should create an event with alt currency", async () => {
 			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
 			await createEvent(currencyMint)
 
@@ -166,17 +197,21 @@ describe("wager-market", async () => {
 			assert.equal(fetchedEvent.currencyMint.toBase58(), currencyMint.toBase58());
 		});
 
+		it("should create escrow with alt currency", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			await createEvent(currencyMint)
+
+			const escrowAccount = await getAccount(provider.connection, escrow)
+			assert.isTrue(escrowAccount.isInitialized)
+		});
+
 	});
 
 	describe("create_order", function () {
 
 		it("should create an order with correct values", async () => {
 			await createEvent()
-
-			const beforeBalance = await provider.connection.getBalance(user.publicKey)
 			await createOrder()
-			const afterBalance = await provider.connection.getBalance(user.publicKey)
-			console.log(afterBalance - beforeBalance)
 
 			let fetchedOrder = await program.account.order.fetch(order);
 			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
@@ -184,7 +219,70 @@ describe("wager-market", async () => {
 			assert.equal(fetchedOrder.outcome, 1);
 			assert.equal(fetchedOrder.betAmount.toString(), LAMPORTS_PER_SOL.toString());
 			assert.equal(fetchedOrder.askBps, 10000);
+			assert.equal(fetchedOrder.expiry, new anchor.BN(-1));
 			assert.deepEqual(fetchedOrder.fills, [])
+		});
+
+		it("should transfer user's lamports", async () => {
+			await createEvent()
+
+			const preBalance = await provider.connection.getBalance(user.publicKey)
+			await createOrder()
+			const postBalance = await provider.connection.getBalance(user.publicKey)
+
+			assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL)
+		});
+
+		it("should set the correct expiry", async () => {
+			await createEvent()
+			const expiry = moment().add(1, 'day').toDate()
+			await createOrder(1, LAMPORTS_PER_SOL, 10000, expiry)
+
+			let fetchedOrder = await program.account.order.fetch(order);
+			assert.equal(fetchedOrder.expiry.toString(), (Math.floor(expiry.getTime() / 1000)).toString())
+		});
+
+		it("should create an order with alt currency", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+
+			await createEvent(currencyMint)
+			await createOrder(1, 100, 10000, null, currencyMint)
+
+			let fetchedOrder = await program.account.order.fetch(order);
+			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
+			assert.equal(fetchedOrder.event.toString(), event.toString());
+			assert.equal(fetchedOrder.outcome, 1);
+			assert.equal(fetchedOrder.betAmount.toString(), '100');
+			assert.equal(fetchedOrder.askBps, 10000);
+			assert.equal(fetchedOrder.expiry, new anchor.BN(-1));
+			assert.deepEqual(fetchedOrder.fills, [])
+		});
+
+		it("should transfer user's alt currency", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+
+			await createEvent(currencyMint)
+			await createOrder(1, 100, 10000, null, currencyMint)
+
+			let userAccount = await getAccount(provider.connection, userCurrencyAccount)
+			assert.equal(userAccount.amount.toString(), '0')
+
+			let escrowAccount = await getAccount(provider.connection, escrow)
+			assert.equal(escrowAccount.amount.toString(), '100')
+		});
+
+		it("should throw when expiry is in the past", async () => {
+			await createEvent()
+			const expiry = moment().subtract(1, 'day').toDate()
+
+			await assertThrows(async () =>
+				await createOrder(1, LAMPORTS_PER_SOL, 10000, expiry),
+				6004
+			)
 		});
 
 	});

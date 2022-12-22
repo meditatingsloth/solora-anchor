@@ -10,4 +10,6 @@ pub enum Error {
     CalculationOverflow,
     #[msg("The fill amount is too large")]
     FillAmountTooLarge,
+    #[msg("The expiry date has passed")]
+    InvalidExpiry
 }
