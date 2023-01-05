@@ -19,4 +19,10 @@ pub enum Error {
     OrderExpired,
     #[msg("The user already has an existing fill for this order")]
     UserAlreadyFilled,
+    #[msg("Event has not been settled")]
+    EventNotSettled,
+    #[msg("A fill was not found for this user")]
+    FillNotFound,
+    #[msg("The fill has already been settled")]
+    FillAlreadySettled
 }

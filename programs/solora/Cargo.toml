@@ -1,12 +1,12 @@
 [package]
 description = "Wager market for creating wagers for outcomes of events"
 edition = "2021"
-name = "wager_market"
+name = "solora"
 version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "wager_market"
+name = "solora"
 
 [features]
 cpi = ["no-entrypoint"]

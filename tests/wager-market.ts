@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { WagerMarket } from "../target/types/wager_market";
+import { Solora } from "../target/types/solora";
 import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
@@ -12,13 +12,13 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment";
 
-describe("wager-market", async () => {
+describe("solora", async () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true
 	anchor.setProvider(provider);
 
-	const program = anchor.workspace.WagerMarket as anchor.Program<WagerMarket>;
+	const program = anchor.workspace.Solora as anchor.Program<Solora>;
 
 	let eventId: number[];
 	let metadataUri: string;

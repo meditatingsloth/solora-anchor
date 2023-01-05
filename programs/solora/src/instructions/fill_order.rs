@@ -48,18 +48,7 @@ pub fn fill_order<'info>(
         }
     }
 
-    let total_filled = ctx.accounts.order.fills.iter().fold(0 as u64, |acc, fill| acc + fill.fill_amount);
-    msg!("total_filled: {}", total_filled);
-    let total_ask = (ctx.accounts.order.bet_amount as u128)
-        .checked_mul(ctx.accounts.order.ask_bps as u128)
-        .ok_or(Error::CalculationOverflow)?
-        .checked_div(10000 as u128)
-        .ok_or(Error::CalculationOverflow)? as u64;
-    msg!("total_ask: {}", total_ask);
-    let remaining_ask = total_ask.checked_sub(total_filled)
-        .ok_or(Error::CalculationOverflow)?;
-    msg!("remaining_ask: {}", remaining_ask);
-
+    let remaining_ask = ctx.accounts.order.get_remaining_ask().unwrap();
     if fill_amount > remaining_ask {
         return err!(Error::FillAmountTooLarge);
     }
@@ -101,6 +90,7 @@ pub fn fill_order<'info>(
         authority: ctx.accounts.authority.key(),
         outcome,
         fill_amount,
+        is_settled: false,
     });
 
     Ok(())

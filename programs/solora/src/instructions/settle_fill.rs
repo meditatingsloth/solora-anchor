@@ -1,47 +1,59 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, Fill, Order, ORDER_SIZE};
+use crate::state::{Event, Fill, Order};
 use crate::error::Error;
-use crate::util::{assert_is_ata, is_default, transfer, transfer_sol};
+use crate::util::{is_default, transfer, transfer_sol};
 
 #[derive(Accounts)]
-pub struct CreateOrder<'info> {
+#[instruction(index: u32)]
+pub struct SettleFill<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
 
     #[account(
-    init,
-    seeds = [b"order".as_ref(), event.key().as_ref(), &event.order_index.to_le_bytes()],
+    mut,
+    seeds = [b"order".as_ref(), event.key().as_ref(), &index.to_le_bytes()],
     bump,
-    space = ORDER_SIZE,
-    payer = authority,
     )]
     pub order: Box<Account<'info, Order>>,
 
-    #[account(mut)]
+    #[account(
+    mut,
+    constraint = event.is_settled @ Error::EventNotSettled,
+    )]
     pub event: Box<Account<'info, Event>>,
 
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn create_order<'info>(
-    ctx: Context<'_, '_, '_, 'info, CreateOrder<'info>>,
-    outcome: u8,
-    bet_amount: u64,
-    ask_bps: u32,
-    expiry: Option<i64>
+pub fn settle_fill<'info>(
+    ctx: Context<'_, '_, '_, 'info, SettleFill<'info>>,
+    index: u32,
 ) -> Result<()> {
-    if ctx.accounts.event.is_settled {
-        return err!(Error::EventSettled);
+    let fill_index = ctx.accounts.order.get_fill_index(ctx.accounts.authority.key());
+    if fill_index.is_none() {
+        return err!(Error::FillNotFound);
     }
 
+    let fill = &mut ctx.accounts.order.fills[fill_index.unwrap()];
+    if fill.is_settled {
+        return err!(Error::FillAlreadySettled);
+    }
+
+    fill.is_settled = true;
+    // TODO: Remove fill from list and realloc, paying back the authority
+
+    // TODO: Determine winner of wager
     if is_default(ctx.accounts.event.currency_mint) {
         transfer_sol(
             &ctx.accounts.authority.to_account_info(),
             &ctx.accounts.event.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             None,
-            bet_amount,
+            fill.fill_amount,
         )?;
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
@@ -63,30 +75,9 @@ pub fn create_order<'info>(
             None,
             None,
             None,
-            bet_amount,
+            fill.fill_amount,
         )?;
     }
-
-    let order = &mut ctx.accounts.order;
-    order.index = ctx.accounts.event.order_index;
-    order.authority = ctx.accounts.authority.key();
-    order.event = ctx.accounts.event.key();
-    order.outcome = outcome;
-    order.bet_amount = bet_amount;
-    order.ask_bps = ask_bps;
-    order.fills = Vec::new();
-
-    if expiry.is_some() {
-        let timestamp = Clock::get()?.unix_timestamp;
-        if expiry.unwrap() <= timestamp {
-            return err!(Error::InvalidExpiry);
-        }
-        order.expiry = expiry.unwrap();
-    } else {
-        order.expiry = -1;
-    }
-
-    ctx.accounts.event.order_index += 1;
 
     Ok(())
 }

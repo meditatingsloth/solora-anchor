@@ -11,7 +11,7 @@ use crate::error::Error;
 declare_id!("8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS");
 
 #[program]
-pub mod wager_market {
+pub mod solora {
     use super::*;
 
     pub fn create_event<'info>(
@@ -32,6 +32,13 @@ pub mod wager_market {
         instructions::create_order(ctx, outcome, bet_amount, ask_bps, expiry)
     }
 
+    pub fn cancel_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, CancelOrder<'info>>,
+        index: u32
+    ) -> Result<()> {
+        instructions::cancel_order(ctx, index)
+    }
+
     pub fn fill_order<'info>(
         ctx: Context<'_, '_, '_, 'info, FillOrder<'info>>,
         index: u32,
@@ -41,4 +48,10 @@ pub mod wager_market {
         instructions::fill_order(ctx, index, outcome, fill_amount)
     }
 
+    pub fn settle_fill<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettleFill<'info>>,
+        index: u32,
+    ) -> Result<()> {
+        instructions::settle_fill(ctx, index)
+    }
 }

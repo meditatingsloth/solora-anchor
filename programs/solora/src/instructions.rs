@@ -1,10 +1,14 @@
 mod create_event;
 mod create_order;
 mod fill_order;
+mod cancel_order;
+mod settle_fill;
 
 pub use create_event::*;
 pub use create_order::*;
 pub use fill_order::*;
+pub use cancel_order::*;
+pub use settle_fill::*;
 
 /*
 mod swap;

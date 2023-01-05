@@ -1,1 +1,1 @@
-# Wager Market
+# Solora

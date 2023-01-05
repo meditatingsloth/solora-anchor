@@ -3,7 +3,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-wager_market = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
+solora = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
 
 [provider]
 cluster = "localnet"
