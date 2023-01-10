@@ -1,10 +1,12 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, Fill, Order, ORDER_SIZE};
+use anchor_spl::token;
+use anchor_spl::token::{CloseAccount};
+use crate::state::{Event, Order};
 use crate::error::Error;
-use crate::util::{assert_is_ata, is_default, transfer, transfer_sol};
+use crate::util::{is_default, transfer};
 
 #[derive(Accounts)]
-#[instruction(index: u32)]
+#[instruction(index: u32, amount: u64)]
 pub struct CancelOrder<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -14,12 +16,14 @@ pub struct CancelOrder<'info> {
     seeds = [b"order".as_ref(), event.key().as_ref(), &index.to_le_bytes()],
     bump,
     has_one = authority,
+    constraint = order.remaining_ask > 0 @ Error::OrderFilled,
+    constraint = amount <= order.remaining_ask @ Error::AmountLargerThanRemainingAsk,
     )]
     pub order: Box<Account<'info, Order>>,
 
     #[account(
     mut,
-    constraint = !event.is_settled @ Error::EventSettled,
+    constraint = event.outcome == 0 @ Error::EventSettled,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -29,12 +33,56 @@ pub struct CancelOrder<'info> {
 pub fn cancel_order<'info>(
     ctx: Context<'_, '_, '_, 'info, CancelOrder<'info>>,
     index: u32,
+    amount: u64
 ) -> Result<()> {
-    // TODO: Fail if no remaining bet amount to be filled
+    let is_native = is_default(ctx.accounts.order.currency_mint);
 
-    // TODO: Close if no fills
+    // No fills so we can return funds and close order account(s)
+    if ctx.accounts.order.fills.len() == 0 {
+        if !is_native {
+            let remaining_accounts = &mut ctx.remaining_accounts.iter();
+            let currency_mint = next_account_info(remaining_accounts)?;
+            let order_currency_account = next_account_info(remaining_accounts)?;
+            let user_currency_account = next_account_info(remaining_accounts)?;
+            let token_program = next_account_info(remaining_accounts)?;
+            let ata_program = next_account_info(remaining_accounts)?;
+            let rent = next_account_info(remaining_accounts)?;
+            let index_bytes = &index.to_le_bytes();
+            let seeds = ctx.accounts.order.auth_seeds(index_bytes);
+            let auth_seeds = seeds.as_ref();
 
-    // TODO: Reduce bet amount if partially filled
+            transfer(
+                &ctx.accounts.order.to_account_info(),
+                &ctx.accounts.authority.to_account_info(),
+                order_currency_account.into(),
+                user_currency_account.into(),
+                currency_mint.into(),
+                Option::from(&ctx.accounts.authority.to_account_info()),
+                ata_program.into(),
+                token_program.into(),
+                &ctx.accounts.system_program.to_account_info(),
+                rent.into(),
+                auth_seeds.into(),
+                None,
+                ctx.accounts.order.amount,
+            )?;
+
+            token::close_account(
+                CpiContext::new(
+                    token_program.to_account_info(),
+                    CloseAccount {
+                        account: order_currency_account.to_account_info(),
+                        destination: ctx.accounts.authority.to_account_info(),
+                        authority: ctx.accounts.order.to_account_info(),
+                    },
+                ).with_signer(&[auth_seeds]),
+            )?;
+        }
+
+        ctx.accounts.order.close(ctx.accounts.authority.to_account_info())?;
+    } else {
+        // TODO: Reduce bet amount if partially filled
+    }
 
     Ok(())
 }

@@ -6,8 +6,6 @@ mod error;
 mod instructions;
 mod util;
 
-use crate::error::Error;
-
 declare_id!("8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS");
 
 #[program]
@@ -17,41 +15,45 @@ pub mod solora {
     pub fn create_event<'info>(
         ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
         id: [u8; 32],
+        fee_account: Pubkey,
+        fee_bps: u32,
         metadata_uri: String,
     ) -> Result<()> {
-        instructions::create_event(ctx, id, metadata_uri)
+        instructions::create_event(ctx, id, fee_account, fee_bps, metadata_uri)
     }
 
     pub fn create_order<'info>(
         ctx: Context<'_, '_, '_, 'info, CreateOrder<'info>>,
         outcome: u8,
-        bet_amount: u64,
+        amount: u64,
         ask_bps: u32,
-        expiry: Option<i64>
+        expiry: i64
     ) -> Result<()> {
-        instructions::create_order(ctx, outcome, bet_amount, ask_bps, expiry)
+        instructions::create_order(ctx, outcome, amount, ask_bps, expiry)
     }
 
     pub fn cancel_order<'info>(
         ctx: Context<'_, '_, '_, 'info, CancelOrder<'info>>,
-        index: u32
+        index: u32,
+        amount: u64
     ) -> Result<()> {
-        instructions::cancel_order(ctx, index)
+        instructions::cancel_order(ctx, index, amount)
     }
 
     pub fn fill_order<'info>(
         ctx: Context<'_, '_, '_, 'info, FillOrder<'info>>,
         index: u32,
         outcome: u8,
-        fill_amount: u64
+        amount: u64
     ) -> Result<()> {
-        instructions::fill_order(ctx, index, outcome, fill_amount)
+        instructions::fill_order(ctx, index, outcome, amount)
     }
 
     pub fn settle_fill<'info>(
         ctx: Context<'_, '_, '_, 'info, SettleFill<'info>>,
-        index: u32,
+        order_index: u32,
+        fill_index: u32
     ) -> Result<()> {
-        instructions::settle_fill(ctx, index)
+        instructions::settle_fill(ctx, order_index, fill_index)
     }
 }

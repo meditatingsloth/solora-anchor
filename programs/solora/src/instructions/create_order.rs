@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, Fill, Order, ORDER_SIZE};
+use crate::state::{Event, Order, ORDER_SIZE};
 use crate::error::Error;
-use crate::util::{assert_is_ata, is_default, transfer, transfer_sol};
+use crate::util::{transfer, transfer_sol};
 
 #[derive(Accounts)]
 pub struct CreateOrder<'info> {
@@ -19,7 +19,7 @@ pub struct CreateOrder<'info> {
 
     #[account(
     mut,
-    constraint = !event.is_settled @ Error::EventSettled,
+    constraint = event.outcome == 0 @ Error::EventSettled,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -30,59 +30,72 @@ pub struct CreateOrder<'info> {
 pub fn create_order<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateOrder<'info>>,
     outcome: u8,
-    bet_amount: u64,
+    amount: u64,
     ask_bps: u32,
-    expiry: Option<i64>
+    expiry: i64
 ) -> Result<()> {
-    if is_default(ctx.accounts.event.currency_mint) {
-        transfer_sol(
-            &ctx.accounts.authority.to_account_info(),
-            &ctx.accounts.event.to_account_info(),
-            &ctx.accounts.system_program.to_account_info(),
-            None,
-            bet_amount,
-        )?;
-    } else {
-        let remaining_accounts = &mut ctx.remaining_accounts.iter();
-        let currency_mint = next_account_info(remaining_accounts)?;
-        let escrow_account = next_account_info(remaining_accounts)?;
-        let user_currency_account = next_account_info(remaining_accounts)?;
-        let token_program = next_account_info(remaining_accounts)?;
+    if expiry != 0 {
+        let timestamp = Clock::get()?.unix_timestamp;
+        if expiry <= timestamp {
+            return err!(Error::InvalidExpiry);
+        }
+    }
 
-        transfer(
-            &ctx.accounts.authority.to_account_info(),
-            &ctx.accounts.event.to_account_info(),
-            user_currency_account.into(),
-            escrow_account.into(),
-            currency_mint.into(),
-            None,
-            None,
-            token_program.into(),
-            &ctx.accounts.system_program.to_account_info(),
-            None,
-            None,
-            None,
-            bet_amount,
-        )?;
+    if outcome == 0 {
+        return err!(Error::InvalidOutcome);
     }
 
     let order = &mut ctx.accounts.order;
+    order.bump = [*ctx.bumps.get("order").unwrap()];
     order.index = ctx.accounts.event.order_index;
     order.authority = ctx.accounts.authority.key();
     order.event = ctx.accounts.event.key();
     order.outcome = outcome;
-    order.bet_amount = bet_amount;
+    order.amount = amount;
     order.ask_bps = ask_bps;
+    order.remaining_ask = (amount as u128)
+        .checked_mul(ask_bps as u128).unwrap()
+        .checked_div(10000 as u128).unwrap() as u64;
+    order.expiry = expiry;
     order.fills = Vec::new();
 
-    if expiry.is_some() {
-        let timestamp = Clock::get()?.unix_timestamp;
-        if expiry.unwrap() <= timestamp {
-            return err!(Error::InvalidExpiry);
-        }
-        order.expiry = expiry.unwrap();
+    // If there are remaining_accounts populated we're using an alt currency mint
+    if ctx.remaining_accounts.len() == 0 {
+        transfer_sol(
+            &ctx.accounts.authority.to_account_info(),
+            &order.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            None,
+            amount,
+        )?;
+
+        order.currency_mint = Pubkey::default();
     } else {
-        order.expiry = -1;
+        let remaining_accounts = &mut ctx.remaining_accounts.iter();
+        let currency_mint = next_account_info(remaining_accounts)?;
+        let order_currency_account = next_account_info(remaining_accounts)?;
+        let user_currency_account = next_account_info(remaining_accounts)?;
+        let token_program = next_account_info(remaining_accounts)?;
+        let ata_program = next_account_info(remaining_accounts)?;
+        let rent = next_account_info(remaining_accounts)?;
+
+        transfer(
+            &ctx.accounts.authority.to_account_info(),
+            &order.to_account_info(),
+            user_currency_account.into(),
+            order_currency_account.into(),
+            currency_mint.into(),
+            Option::from(&ctx.accounts.authority.to_account_info()),
+            ata_program.into(),
+            token_program.into(),
+            &ctx.accounts.system_program.to_account_info(),
+            rent.into(),
+            None,
+            None,
+            amount,
+        )?;
+
+        order.currency_mint = currency_mint.key();
     }
 
     ctx.accounts.event.order_index = ctx.accounts.event.order_index.checked_add(1)

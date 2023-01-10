@@ -1,4 +1,3 @@
-use std::slice::Iter;
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address;
 use anchor_spl::token::Mint;
@@ -117,6 +116,8 @@ pub fn transfer<'a>(
         let to_currency_account = to_currency_account.unwrap();
         let currency_mint = currency_mint.unwrap();
         let token_program = token_program.unwrap();
+
+        assert_is_mint(currency_mint)?;
 
         if to_currency_account.data_is_empty() {
             let fee_payer = fee_payer.unwrap();

@@ -24,5 +24,13 @@ pub enum Error {
     #[msg("A fill was not found for this user")]
     FillNotFound,
     #[msg("The fill has already been settled")]
-    FillAlreadySettled
+    FillAlreadySettled,
+
+    /// 10
+    #[msg("The order has already been filled")]
+    OrderFilled,
+    #[msg("The amount to remove is more than remaining ask")]
+    AmountLargerThanRemainingAsk,
+    #[msg("The fill authority does not match")]
+    InvalidFillAuthority,
 }
