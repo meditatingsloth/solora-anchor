@@ -45,7 +45,7 @@ pub struct Order {
     pub event: Pubkey,
     pub outcome: u8,
     pub amount: u64,
-    /// SPL token mint or default pubkey for SOL
+    /// SPL token mint or native mint for SOL
     pub currency_mint: Pubkey,
     pub ask_bps: u32,
     pub remaining_ask: u64,

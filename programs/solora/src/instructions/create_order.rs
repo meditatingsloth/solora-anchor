@@ -45,17 +45,22 @@ pub fn create_order<'info>(
         return err!(Error::InvalidOutcome);
     }
 
+    let total_ask = (amount as u128)
+        .checked_mul(ask_bps as u128).unwrap()
+        .checked_div(10000 as u128).unwrap() as u64;
+    let order_obligation = (total_ask as u128)
+        .checked_mul(10000 as u128).unwrap()
+        .checked_div(ask_bps as u128).unwrap() as u64;
+
     let order = &mut ctx.accounts.order;
     order.bump = [*ctx.bumps.get("order").unwrap()];
     order.index = ctx.accounts.event.order_index;
     order.authority = ctx.accounts.authority.key();
     order.event = ctx.accounts.event.key();
     order.outcome = outcome;
-    order.amount = amount;
+    order.amount = order_obligation;
     order.ask_bps = ask_bps;
-    order.remaining_ask = (amount as u128)
-        .checked_mul(ask_bps as u128).unwrap()
-        .checked_div(10000 as u128).unwrap() as u64;
+    order.remaining_ask = total_ask;
     order.expiry = expiry;
     order.fills = Vec::new();
 
@@ -66,10 +71,10 @@ pub fn create_order<'info>(
             &order.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             None,
-            amount,
+            order_obligation,
         )?;
 
-        order.currency_mint = Pubkey::default();
+        order.currency_mint = spl_token::native_mint::ID;
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
         let currency_mint = next_account_info(remaining_accounts)?;
@@ -92,7 +97,7 @@ pub fn create_order<'info>(
             rent.into(),
             None,
             None,
-            amount,
+            order_obligation,
         )?;
 
         order.currency_mint = currency_mint.key();

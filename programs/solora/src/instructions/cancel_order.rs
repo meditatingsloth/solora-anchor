@@ -3,7 +3,7 @@ use anchor_spl::token;
 use anchor_spl::token::{CloseAccount};
 use crate::state::{Event, Order};
 use crate::error::Error;
-use crate::util::{is_default, transfer};
+use crate::util::{is_native_mint, transfer};
 
 #[derive(Accounts)]
 #[instruction(index: u32, amount: u64)]
@@ -14,7 +14,7 @@ pub struct CancelOrder<'info> {
     #[account(
     mut,
     seeds = [b"order".as_ref(), event.key().as_ref(), &index.to_le_bytes()],
-    bump,
+    bump = order.bump[0],
     has_one = authority,
     constraint = order.remaining_ask > 0 @ Error::OrderFilled,
     constraint = amount <= order.remaining_ask @ Error::AmountLargerThanRemainingAsk,
@@ -35,7 +35,7 @@ pub fn cancel_order<'info>(
     index: u32,
     amount: u64
 ) -> Result<()> {
-    let is_native = is_default(ctx.accounts.order.currency_mint);
+    let is_native = is_native_mint(ctx.accounts.order.currency_mint);
 
     // No fills so we can return funds and close order account(s)
     if ctx.accounts.order.fills.len() == 0 {

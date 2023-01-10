@@ -49,6 +49,14 @@ pub mod solora {
         instructions::fill_order(ctx, index, outcome, amount)
     }
 
+    pub fn settle_event<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettleEvent<'info>>,
+        id: [u8; 32],
+        outcome: u8
+    ) -> Result<()> {
+        instructions::settle_event(ctx, id, outcome)
+    }
+
     pub fn settle_fill<'info>(
         ctx: Context<'_, '_, '_, 'info, SettleFill<'info>>,
         order_index: u32,

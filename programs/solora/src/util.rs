@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address;
-use anchor_spl::token::Mint;
+use anchor_spl::token;
+use anchor_spl::token::{Mint, Transfer};
 use solana_program::{pubkey::Pubkey, account_info::AccountInfo, pubkey, system_instruction};
 use solana_program::program::{invoke, invoke_signed};
 use solana_program::program_pack::{IsInitialized, Pack};
@@ -63,7 +64,7 @@ pub fn transfer_sol<'a>(
     )?)
 }
 
-/// Transfers SOL or SPL tokens between two accounts. A default pubkey can be used for the
+/// Transfers SOL or SPL tokens between two accounts. The native mint can be used for the
 /// currency mint to specifically transfer SOL.
 pub fn transfer<'a>(
     from: &AccountInfo<'a>,
@@ -81,7 +82,7 @@ pub fn transfer<'a>(
     amount: u64,
 ) -> Result<()> {
     let is_native = if currency_mint.is_some() {
-        is_default(currency_mint.unwrap().key())
+        is_native_mint(currency_mint.unwrap().key())
     } else {
         true
     };
@@ -123,7 +124,12 @@ pub fn transfer<'a>(
             let fee_payer = fee_payer.unwrap();
             let ata_program = ata_program.unwrap();
             let rent = rent.unwrap();
-            let fee_payer_seeds = fee_payer_seeds.unwrap();
+            let fee_payer_seeds = if fee_payer_seeds.is_some() {
+                fee_payer_seeds.unwrap()
+            }  else {
+                &[]
+            };
+
             make_ata(
                 to_currency_account.to_account_info(),
                 to.to_account_info(),
@@ -143,32 +149,25 @@ pub fn transfer<'a>(
             &currency_mint.key(),
         )?;
 
-        let transfer_ix = &spl_token::instruction::transfer(
-            token_program.key,
-            from_currency_account.key,
-            to_currency_account.key,
-            from.key,
-            &[],
-            amount,
-        )?;
+        let transfer_cpi = CpiContext::new(
+            token_program.to_account_info(),
+            Transfer {
+                from: from_currency_account.to_account_info(),
+                to: to_currency_account.to_account_info(),
+                authority: from.to_account_info(),
+            },
+        );
 
-        let transfer_accounts = &[
-            token_program.clone(),
-            from_currency_account.clone(),
-            to_currency_account.clone(),
-            from.clone(),
-        ];
-
+        msg!("Invoking transfer");
         if signer_seeds.is_some() {
-            invoke_signed(
-                transfer_ix,
-                transfer_accounts,
-                &[signer_seeds.unwrap()],
+            token::transfer(
+                transfer_cpi.with_signer(&[signer_seeds.unwrap()]),
+                amount,
             )?;
         } else {
-            invoke(
-                transfer_ix,
-                transfer_accounts,
+            token::transfer(
+                transfer_cpi,
+                amount,
             )?;
         }
     }
@@ -176,8 +175,8 @@ pub fn transfer<'a>(
     Ok(())
 }
 
-pub fn is_default(key: Pubkey) -> bool {
-    return key == pubkey::Pubkey::default();
+pub fn is_native_mint(key: Pubkey) -> bool {
+    return key == spl_token::native_mint::ID;
 }
 
 pub fn assert_keys_equal(key1: Pubkey, key2: Pubkey) -> Result<()> {

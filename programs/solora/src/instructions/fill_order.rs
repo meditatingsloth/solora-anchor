@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::{Event, Fill, Order};
 use crate::error::Error;
-use crate::util::{is_default, transfer, transfer_sol};
+use crate::util::{is_native_mint, transfer, transfer_sol};
 
 #[derive(Accounts)]
 #[instruction(index: u32, outcome: u8)]
@@ -12,7 +12,7 @@ pub struct FillOrder<'info> {
     #[account(
     mut,
     seeds = [b"order".as_ref(), event.key().as_ref(), &index.to_le_bytes()],
-    bump,
+    bump = order.bump[0],
     realloc = Order::space(order.fills.len() as usize + 1),
     realloc::payer = authority,
     realloc::zero = false,
@@ -23,6 +23,7 @@ pub struct FillOrder<'info> {
     #[account(
     mut,
     constraint = event.outcome == 0 @ Error::EventSettled,
+    constraint = outcome != event.outcome @ Error::InvalidOutcome,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -36,12 +37,7 @@ pub fn fill_order<'info>(
     outcome: u8,
     amount: u64,
 ) -> Result<()> {
-    if ctx.accounts.order.get_fill_index(ctx.accounts.authority.key()) != None {
-        msg!("Fill already exists for {}, use update_fill instead", ctx.accounts.authority.key());
-        return err!(Error::UserAlreadyFilled);
-    }
-
-    if ctx.accounts.order.expiry != -1 {
+    if ctx.accounts.order.expiry != 0 {
         let timestamp = Clock::get()?.unix_timestamp;
         if ctx.accounts.order.expiry <= timestamp {
             return err!(Error::OrderExpired);
@@ -52,13 +48,21 @@ pub fn fill_order<'info>(
         return err!(Error::FillAmountTooLarge);
     }
 
-    if is_default(ctx.accounts.order.currency_mint) {
+    let order_obligation = (amount as u128)
+        .checked_mul(10000 as u128).unwrap()
+        .checked_div(ctx.accounts.order.ask_bps as u128).unwrap() as u64;
+    // Ensure the obligation is not too large.
+    let safe_amount = (order_obligation as u128)
+        .checked_mul(ctx.accounts.order.ask_bps as u128).unwrap()
+        .checked_div(10000 as u128).unwrap() as u64;
+
+    if is_native_mint(ctx.accounts.order.currency_mint) {
         transfer_sol(
             &ctx.accounts.authority.to_account_info(),
             &ctx.accounts.order.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             None,
-            amount,
+            safe_amount,
         )?;
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
@@ -80,19 +84,19 @@ pub fn fill_order<'info>(
             None,
             None,
             None,
-            amount,
+            safe_amount,
         )?;
     }
 
     let fill_index = ctx.accounts.order.fills.len() as u32;
     let order = &mut ctx.accounts.order;
-    order.remaining_ask = order.remaining_ask.checked_sub(amount)
+    order.remaining_ask = order.remaining_ask.checked_sub(safe_amount)
         .ok_or(Error::CalculationOverflow)?;
     order.fills.push(Fill {
         index: fill_index,
         authority: ctx.accounts.authority.key(),
         outcome,
-        amount,
+        amount: safe_amount,
         is_settled: false,
     });
 

@@ -5,14 +5,18 @@ use crate::state::{Event, EVENT_SIZE};
 #[instruction(id: [u8; 32])]
 pub struct CreateEvent<'info> {
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub payer: Signer<'info>,
+
+    /// CHECK: Allow any account to be the settle authority
+    #[account()]
+    pub authority: UncheckedAccount<'info>,
 
     #[account(
     init,
     seeds = [b"event".as_ref(), id.as_ref()],
     bump,
     space = EVENT_SIZE,
-    payer = authority,
+    payer = payer,
     )]
     pub event: Box<Account<'info, Event>>,
 

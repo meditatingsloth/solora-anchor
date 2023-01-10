@@ -1,12 +1,12 @@
 import * as anchor from "@project-serum/anchor";
 import { Solora } from "../target/types/solora";
-import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
+import {LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
 import {
 	ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccount,
 	createMint, getAccount,
-	getAssociatedTokenAddressSync, mintTo,
+	getAssociatedTokenAddressSync, mintTo, NATIVE_MINT,
 	TOKEN_PROGRAM_ID
 } from "@solana/spl-token";
 import { v4 as uuidv4 } from 'uuid';
@@ -23,13 +23,17 @@ describe("solora", async () => {
 	let eventId: number[];
 	let metadataUri: string;
 	let event: PublicKey;
-	let escrow: PublicKey;
 	let order: PublicKey;
+	let orderCurrencyAccount: PublicKey;
+	let userCurrencyAccount: PublicKey;
+	let userBCurrencyAccount: PublicKey;
 
 	const payer = anchor.web3.Keypair.generate();
 	const eventAuthority = anchor.web3.Keypair.generate();
 	const user = anchor.web3.Keypair.generate();
 	const userB = anchor.web3.Keypair.generate();
+	let feeAccount = anchor.web3.Keypair.generate();
+	let feeBps: number;
 
 	before(async () => {
 		await Promise.all([payer, eventAuthority, user, userB].map(keypair => {
@@ -38,6 +42,12 @@ describe("solora", async () => {
 			)
 		}))
 	})
+
+	beforeEach(setUpData)
+
+	async function setUpData() {
+		feeBps = 300
+	}
 
 	function sha256(str: string) {
 		return crypto.createHash('sha256').update(str).digest();
@@ -66,7 +76,7 @@ describe("solora", async () => {
 		assert.isTrue(throws, 'Expected error to be thrown')
 	}
 
-	async function createEvent(currencyMint?: PublicKey) {
+	async function createEvent() {
 		metadataUri = "https://example.com";
 		eventId = Array.from(sha256(uuidv4()));
 
@@ -75,8 +85,9 @@ describe("solora", async () => {
 			program.programId
 		);
 
-		const builder = program.methods.createEvent(eventId, metadataUri)
+		const builder = program.methods.createEvent(eventId, feeAccount.publicKey, feeBps, metadataUri)
 			.accounts({
+				payer: eventAuthority.publicKey,
 				authority: eventAuthority.publicKey,
 				event,
 				systemProgram: anchor.web3.SystemProgram.programId,
@@ -84,31 +95,10 @@ describe("solora", async () => {
 			})
 			.signers([eventAuthority])
 
-		if (currencyMint) {
-			escrow = getAssociatedTokenAddressSync(currencyMint, event, true)
-			builder.remainingAccounts([{
-				isWritable: false,
-				isSigner: false,
-				pubkey: currencyMint,
-			}, {
-				isWritable: true,
-				isSigner: false,
-				pubkey: escrow,
-			}, {
-				isWritable: false,
-				isSigner: false,
-				pubkey: TOKEN_PROGRAM_ID,
-			}, {
-				isWritable: false,
-				isSigner: false,
-				pubkey: ASSOCIATED_TOKEN_PROGRAM_ID,
-			}])
-		}
-
 		await builder.rpc();
 	}
 
-	async function createOrder(orderIndex=0, outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000, expiry?: Date, currencyMint?: PublicKey) {
+	async function createOrder(currencyMint=NATIVE_MINT, orderIndex=0, outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000, expiry?: Date) {
 		[order] = PublicKey.findProgramAddressSync(
 			[Buffer.from("order"), event.toBuffer(), numberToBuffer(orderIndex)],
 			program.programId
@@ -118,7 +108,7 @@ describe("solora", async () => {
 			outcome,
 			new anchor.BN(betAmount),
 			askBps,
-			expiry ? new anchor.BN(Math.floor(expiry.getTime() / 1000)) : null,
+			new anchor.BN(expiry ? Math.floor(expiry.getTime() / 1000) : 0),
 		).accounts({
 			authority: user.publicKey,
 			order,
@@ -127,8 +117,10 @@ describe("solora", async () => {
 			rent: anchor.web3.SYSVAR_RENT_PUBKEY,
 		}).signers([user])
 
-		if (currencyMint) {
-			escrow = getAssociatedTokenAddressSync(currencyMint, event, true)
+		if (currencyMint != null &&
+			currencyMint.toString() != NATIVE_MINT.toString()) {
+			orderCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, order, true)
+			userCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, user.publicKey)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
@@ -136,22 +128,30 @@ describe("solora", async () => {
 			}, {
 				isWritable: true,
 				isSigner: false,
-				pubkey: escrow,
+				pubkey: orderCurrencyAccount,
 			}, {
 				isWritable: true,
 				isSigner: false,
-				pubkey: getAssociatedTokenAddressSync(currencyMint, user.publicKey),
-			},{
+				pubkey: userCurrencyAccount,
+			}, {
 				isWritable: false,
 				isSigner: false,
 				pubkey: TOKEN_PROGRAM_ID,
+			}, {
+				isWritable: false,
+				isSigner: false,
+				pubkey: ASSOCIATED_TOKEN_PROGRAM_ID,
+			}, {
+				isWritable: false,
+				isSigner: false,
+				pubkey: SYSVAR_RENT_PUBKEY,
 			}])
 		}
 
 		await builder.rpc();
 	}
 
-	async function fillOrder(orderIndex=0, outcome=0, fillAmount=LAMPORTS_PER_SOL, currencyMint?: PublicKey) {
+	async function fillOrder(orderIndex=0, outcome=2, fillAmount=LAMPORTS_PER_SOL, currencyMint=NATIVE_MINT) {
 		[order] = PublicKey.findProgramAddressSync(
 			[Buffer.from("order"), event.toBuffer(), numberToBuffer(orderIndex)],
 			program.programId
@@ -169,8 +169,10 @@ describe("solora", async () => {
 			rent: anchor.web3.SYSVAR_RENT_PUBKEY,
 		}).signers([userB])
 
-		if (currencyMint) {
-			escrow = getAssociatedTokenAddressSync(currencyMint, event, true)
+		if (currencyMint != null &&
+			currencyMint.toString() != NATIVE_MINT.toString()) {
+			orderCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, order, true)
+			userBCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, userB.publicKey)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
@@ -178,11 +180,11 @@ describe("solora", async () => {
 			}, {
 				isWritable: true,
 				isSigner: false,
-				pubkey: escrow,
+				pubkey: orderCurrencyAccount,
 			}, {
 				isWritable: true,
 				isSigner: false,
-				pubkey: getAssociatedTokenAddressSync(currencyMint, userB.publicKey),
+				pubkey: userBCurrencyAccount,
 			},{
 				isWritable: false,
 				isSigner: false,
@@ -193,8 +195,20 @@ describe("solora", async () => {
 		await builder.rpc();
 	}
 
-	async function settleEvent() {
+	async function settleEvent(outcome=1) {
+		const builder = program.methods.settleEvent(eventId, outcome)
+			.accounts({
+				authority: eventAuthority.publicKey,
+				event,
+				systemProgram: anchor.web3.SystemProgram.programId,
+			})
+			.signers([eventAuthority])
 
+		await builder.rpc();
+	}
+
+	function getFee(amount: number) {
+		return Math.floor(amount * feeBps / 10000);
 	}
 
 	describe("create_event", function () {
@@ -208,30 +222,9 @@ describe("solora", async () => {
 				Buffer.from(fetchedEvent.id).toString('hex'),
 				Buffer.from(eventId).toString('hex')
 			);
+			assert.equal(fetchedEvent.feeAccount.toBase58(), feeAccount.publicKey.toBase58());
+			assert.equal(fetchedEvent.feeBps, feeBps);
 			assert.equal(fetchedEvent.metadataUri, metadataUri);
-			assert.equal(fetchedEvent.currencyMint.toBase58(), PublicKey.default.toBase58());
-		});
-
-		it("should create an event with alt currency", async () => {
-			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
-			await createEvent(currencyMint)
-
-			let fetchedEvent = await program.account.event.fetch(event);
-			assert.equal(fetchedEvent.authority.toBase58(), eventAuthority.publicKey.toBase58());
-			assert.equal(
-				Buffer.from(fetchedEvent.id).toString('hex'),
-				Buffer.from(eventId).toString('hex')
-			);
-			assert.equal(fetchedEvent.metadataUri, metadataUri);
-			assert.equal(fetchedEvent.currencyMint.toBase58(), currencyMint.toBase58());
-		});
-
-		it("should create escrow with alt currency", async () => {
-			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
-			await createEvent(currencyMint)
-
-			const escrowAccount = await getAccount(provider.connection, escrow)
-			assert.isTrue(escrowAccount.isInitialized)
 		});
 
 	});
@@ -247,9 +240,31 @@ describe("solora", async () => {
 			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
 			assert.equal(fetchedOrder.event.toString(), event.toString());
 			assert.equal(fetchedOrder.outcome, 1);
-			assert.equal(fetchedOrder.betAmount.toString(), LAMPORTS_PER_SOL.toString());
+			assert.equal(fetchedOrder.amount.toString(), LAMPORTS_PER_SOL.toString());
+			assert.equal(fetchedOrder.currencyMint.toString(), NATIVE_MINT.toString());
 			assert.equal(fetchedOrder.askBps, 10000);
-			assert.equal(fetchedOrder.expiry.toString(), '-1');
+			assert.equal(fetchedOrder.remainingAsk.toString(), LAMPORTS_PER_SOL.toString());
+			assert.equal(fetchedOrder.expiry.toString(), '0');
+			assert.deepEqual(fetchedOrder.fills, [])
+		});
+
+		it("should create an order with correct values for non-native token", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+
+			await createEvent()
+			await createOrder(currencyMint, 0, 1, 100)
+
+			let fetchedOrder = await program.account.order.fetch(order);
+			assert.equal(fetchedOrder.index, 0);
+			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
+			assert.equal(fetchedOrder.event.toString(), event.toString());
+			assert.equal(fetchedOrder.outcome, 1);
+			assert.equal(fetchedOrder.amount.toString(), '100');
+			assert.equal(fetchedOrder.currencyMint.toString(), currencyMint.toString());
+			assert.equal(fetchedOrder.askBps, 10000);
+			assert.equal(fetchedOrder.expiry.toString(), '0');
 			assert.deepEqual(fetchedOrder.fills, [])
 		});
 
@@ -266,7 +281,7 @@ describe("solora", async () => {
 		it("should set the correct expiry", async () => {
 			await createEvent()
 			const expiry = moment().add(1, 'day').toDate()
-			await createOrder(0, 1, LAMPORTS_PER_SOL, 10000, expiry)
+			await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry)
 
 			let fetchedOrder = await program.account.order.fetch(order);
 			assert.equal(fetchedOrder.expiry.toString(), (Math.floor(expiry.getTime() / 1000)).toString())
@@ -279,42 +294,24 @@ describe("solora", async () => {
 			let fetchedEvent = await program.account.event.fetch(event);
 			assert.equal(fetchedEvent.orderIndex, 1);
 
-			await createOrder(1)
+			await createOrder(NATIVE_MINT, 1)
 			let fetchedOrder = await program.account.order.fetch(order);
 			assert.equal(fetchedOrder.index, 1)
 		});
 
-		it("should create an order with alt currency", async () => {
-			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
-			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
-			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
-
-			await createEvent(currencyMint)
-			await createOrder(0, 1, 100, 10000, null, currencyMint)
-
-			let fetchedOrder = await program.account.order.fetch(order);
-			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
-			assert.equal(fetchedOrder.event.toString(), event.toString());
-			assert.equal(fetchedOrder.outcome, 1);
-			assert.equal(fetchedOrder.betAmount.toString(), '100');
-			assert.equal(fetchedOrder.askBps, 10000);
-			assert.equal(fetchedOrder.expiry.toString(), '-1');
-			assert.deepEqual(fetchedOrder.fills, [])
-		});
-
 		it("should transfer user's alt currency", async () => {
 			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
-			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+			userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
 
-			await createEvent(currencyMint)
-			await createOrder(0, 1, 100, 10000, null, currencyMint)
+			await createEvent()
+			await createOrder(currencyMint, 0, 1, 100, 10000, null)
 
-			let userAccount = await getAccount(provider.connection, userCurrencyAccount)
-			assert.equal(userAccount.amount.toString(), '0')
+			let userCurrencyAccountObject = await getAccount(provider.connection, userCurrencyAccount)
+			assert.equal(userCurrencyAccountObject.amount.toString(), '0')
 
-			let escrowAccount = await getAccount(provider.connection, escrow)
-			assert.equal(escrowAccount.amount.toString(), '100')
+			let orderCurrencyAccountObject = await getAccount(provider.connection, orderCurrencyAccount)
+			assert.equal(orderCurrencyAccountObject.amount.toString(), '100')
 		});
 
 		it("should throw when expiry is in the past", async () => {
@@ -322,7 +319,7 @@ describe("solora", async () => {
 			const expiry = moment().subtract(1, 'day').toDate()
 
 			await assertThrows(async () =>
-				await createOrder(0, 1, LAMPORTS_PER_SOL, 10000, expiry),
+				await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry),
 				6004
 			)
 		});
@@ -345,9 +342,11 @@ describe("solora", async () => {
 
 			let fetchedOrder = await program.account.order.fetch(order);
 			assert.deepEqual(JSON.parse(JSON.stringify(fetchedOrder.fills)), [{
+				index: 0,
 				authority: userB.publicKey.toBase58(),
-				outcome: 0,
-				fillAmount: new anchor.BN(LAMPORTS_PER_SOL).toString('hex'),
+				outcome: 2,
+				amount: new anchor.BN(LAMPORTS_PER_SOL).toString('hex'),
+				isSettled: false
 			}])
 		});
 
@@ -356,14 +355,14 @@ describe("solora", async () => {
 			await createOrder()
 
 			const preBalance = await provider.connection.getBalance(userB.publicKey)
-			const eventPreBalance = await provider.connection.getBalance(event)
+			const orderPreBalance = await provider.connection.getBalance(order)
 			await fillOrder()
 
 			const postBalance = await provider.connection.getBalance(userB.publicKey)
-			assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL - 200000)
+			assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL)
 
-			const eventPostBalance = await provider.connection.getBalance(event)
-			assert.equal(eventPostBalance, eventPreBalance + LAMPORTS_PER_SOL)
+			const orderPostBalance = await provider.connection.getBalance(order)
+			assert.equal(orderPostBalance, orderPreBalance + LAMPORTS_PER_SOL)
 		});
 
 		it("should fill an order with alt currency", async () => {
@@ -373,15 +372,17 @@ describe("solora", async () => {
 			const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
 
-			await createEvent(currencyMint)
-			await createOrder(0, 1, 100, 10000, null, currencyMint)
-			await fillOrder(0, 0, 100, currencyMint)
+			await createEvent()
+			await createOrder(currencyMint, 0, 1, 100, 10000, null)
+			await fillOrder(0, 2, 100, currencyMint)
 
 			let fetchedOrder = await program.account.order.fetch(order);
 			assert.deepEqual(JSON.parse(JSON.stringify(fetchedOrder.fills)), [{
+				index: 0,
+				isSettled: false,
 				authority: userB.publicKey.toBase58(),
-				outcome: 0,
-				fillAmount: new anchor.BN(100).toString('hex'),
+				outcome: 2,
+				amount: new anchor.BN(100).toString('hex'),
 			}])
 		});
 
@@ -392,16 +393,25 @@ describe("solora", async () => {
 			const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
 
-			await createEvent(currencyMint)
-			await createOrder(0, 1, 100, 10000, null, currencyMint)
-			await fillOrder(0, 0, 100, currencyMint)
+			await createEvent()
+			await createOrder(currencyMint, 0, 1, 100, 10000, null)
+			await fillOrder(0, 2, 100, currencyMint)
 
 			let userBAccount = await getAccount(provider.connection, userBCurrencyAccount)
 			assert.equal(userBAccount.amount.toString(), '0')
 
-			let escrowAccount = await getAccount(provider.connection, escrow)
+			let escrowAccount = await getAccount(provider.connection, orderCurrencyAccount)
 			// 100 from the order, 100 from the fill
 			assert.equal(escrowAccount.amount.toString(), '200')
+		});
+
+		it("should throw an error when filling with outcome 0", async function () {
+			await createEvent()
+			await createOrder()
+
+			await assertThrows(async() => {
+				await fillOrder(0, 0)
+			}, 6001)
 		});
 
 		it("should throw an error when event is already settled", async function () {
@@ -423,20 +433,10 @@ describe("solora", async () => {
 			}, 6001)
 		});
 
-		it("should throw an error when user has already filled this order", async function () {
-			await createEvent()
-			await createOrder()
-			await fillOrder()
-
-			await assertThrows(async() => {
-				await fillOrder()
-			}, 6006)
-		});
-
 		it("should throw an error when the order has expired", async function () {
 			await createEvent()
 			const expiry = moment().add(3, 'seconds').toDate()
-			await createOrder(0, 1, LAMPORTS_PER_SOL, 10000, expiry)
+			await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry)
 
 			await new Promise(resolve => setTimeout(resolve, 4000))
 
@@ -450,7 +450,7 @@ describe("solora", async () => {
 			await createOrder()
 
 			await assertThrows(async() => {
-				await fillOrder(0, 0, LAMPORTS_PER_SOL * 2)
+				await fillOrder(0, 2, LAMPORTS_PER_SOL * 2)
 			}, 6003)
 		});
 

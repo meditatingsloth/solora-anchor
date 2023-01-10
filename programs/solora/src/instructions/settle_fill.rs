@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::{Event, Order};
 use crate::error::Error;
-use crate::util::{is_default, transfer};
+use crate::util::{is_native_mint, transfer};
 
 #[derive(Accounts)]
 #[instruction(order_index: u32, fill_index: u32)]
@@ -27,7 +27,7 @@ pub struct SettleFill<'info> {
     #[account(
     mut,
     seeds = [b"order".as_ref(), event.key().as_ref(), &order_index.to_le_bytes()],
-    bump,
+    bump = order.bump[0],
     has_one = authority
     )]
     pub order: Box<Account<'info, Order>>,
@@ -59,14 +59,13 @@ pub fn settle_fill<'info>(
         return err!(Error::FillAlreadySettled);
     }
 
-    let is_native = is_default(order_clone.currency_mint);
+    let is_native = is_native_mint(order_clone.currency_mint);
     let index_bytes = &order_index.to_le_bytes();
     let seeds = order.auth_seeds(index_bytes);
     let auth_seeds = seeds.as_ref();
 
     // TODO: Remove fill from list and realloc, paying back the authority
 
-    // TODO: Determine winner of wager
     let is_order_winner = order.outcome == ctx.accounts.event.outcome;
     let is_draw = !is_order_winner && fill.outcome != ctx.accounts.event.outcome;
 
