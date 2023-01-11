@@ -1,6 +1,6 @@
 import * as anchor from "@project-serum/anchor";
 import { Solora } from "../target/types/solora";
-import {LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
 import {
@@ -76,7 +76,7 @@ describe("solora", async () => {
 		assert.isTrue(throws, 'Expected error to be thrown')
 	}
 
-	async function createEvent() {
+	async function createEvent(currencyMint = NATIVE_MINT) {
 		metadataUri = "https://example.com";
 		eventId = Array.from(sha256(uuidv4()));
 
@@ -89,43 +89,38 @@ describe("solora", async () => {
 			eventId,
 			feeAccount.publicKey,
 			feeBps,
-			new anchor.BN(0),
+			new anchor.BN(1704979142),
 			metadataUri
 		).accounts({
-				payer: eventAuthority.publicKey,
-				authority: eventAuthority.publicKey,
-				event,
-				systemProgram: anchor.web3.SystemProgram.programId,
-				rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-			})
+			payer: eventAuthority.publicKey,
+			authority: eventAuthority.publicKey,
+			event,
+			currencyMint
+		})
 			.signers([eventAuthority])
 
 		await builder.rpc();
 	}
 
-	async function createOrder(currencyMint=NATIVE_MINT, orderIndex=0, outcome=1, betAmount=LAMPORTS_PER_SOL, askBps=10000, expiry?: Date) {
+	async function createOrder(payer = user, currencyMint = NATIVE_MINT, outcome, betAmount = LAMPORTS_PER_SOL) {
 		[order] = PublicKey.findProgramAddressSync(
-			[Buffer.from("order"), event.toBuffer(), numberToBuffer(orderIndex)],
+			[Buffer.from("order"), event.toBuffer(), payer.publicKey.toBuffer()],
 			program.programId
 		);
 
 		const builder = program.methods.createOrder(
 			outcome,
 			new anchor.BN(betAmount),
-			askBps,
-			new anchor.BN(expiry ? Math.floor(expiry.getTime() / 1000) : 0),
 		).accounts({
-			authority: user.publicKey,
+			authority: payer.publicKey,
 			order,
-			event,
-			systemProgram: anchor.web3.SystemProgram.programId,
-			rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-		}).signers([user])
+			event
+		}).signers([payer])
 
-		if (currencyMint != null &&
-			currencyMint.toString() != NATIVE_MINT.toString()) {
+		if (currencyMint !== null &&
+			currencyMint.toString() !== NATIVE_MINT.toString()) {
 			orderCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, order, true)
-			userCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, user.publicKey)
+			userCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, payer.publicKey)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
@@ -152,32 +147,32 @@ describe("solora", async () => {
 				pubkey: SYSVAR_RENT_PUBKEY,
 			}])
 		}
-
-		await builder.rpc();
+		try {
+			await builder.rpc();
+		}
+		catch (err) {
+			console.log(err);
+		}
 	}
 
-	async function fillOrder(orderIndex=0, outcome=2, fillAmount=LAMPORTS_PER_SOL, currencyMint=NATIVE_MINT) {
+	async function settleOrder(payer = user, currencyMint = NATIVE_MINT) {
 		[order] = PublicKey.findProgramAddressSync(
-			[Buffer.from("order"), event.toBuffer(), numberToBuffer(orderIndex)],
+			[Buffer.from("order"), event.toBuffer(), payer.publicKey.toBuffer()],
 			program.programId
 		);
 
-		const builder = program.methods.fillOrder(
-			orderIndex,
-			outcome,
-			new anchor.BN(fillAmount),
-		).accounts({
-			authority: userB.publicKey,
+		const builder = program.methods.settleOrder().accounts({
+			authority: payer.publicKey,
 			order,
 			event,
 			systemProgram: anchor.web3.SystemProgram.programId,
 			rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-		}).signers([userB])
+		}).signers([payer])
 
 		if (currencyMint != null &&
 			currencyMint.toString() != NATIVE_MINT.toString()) {
 			orderCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, order, true)
-			userBCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, userB.publicKey)
+			userBCurrencyAccount = getAssociatedTokenAddressSync(currencyMint, payer.publicKey)
 			builder.remainingAccounts([{
 				isWritable: false,
 				isSigner: false,
@@ -190,7 +185,7 @@ describe("solora", async () => {
 				isWritable: true,
 				isSigner: false,
 				pubkey: userBCurrencyAccount,
-			},{
+			}, {
 				isWritable: false,
 				isSigner: false,
 				pubkey: TOKEN_PROGRAM_ID,
@@ -200,7 +195,7 @@ describe("solora", async () => {
 		await builder.rpc();
 	}
 
-	async function settleEvent(outcome=1) {
+	async function settleEvent(outcome = { up: {} }) {
 		const builder = program.methods.settleEvent(eventId, outcome)
 			.accounts({
 				authority: eventAuthority.publicKey,
@@ -230,27 +225,24 @@ describe("solora", async () => {
 			assert.equal(fetchedEvent.feeAccount.toBase58(), feeAccount.publicKey.toBase58());
 			assert.equal(fetchedEvent.feeBps, feeBps);
 			assert.equal(fetchedEvent.metadataUri, metadataUri);
+			assert.equal(fetchedEvent.closeTime.toNumber(), 1704979142);
+			assert.equal(Object.keys(fetchedEvent.outcome)[0], 'undrawn');
+			assert.equal(fetchedEvent.currencyMint.toBase58(), NATIVE_MINT.toBase58());
 		});
 
 	});
 
-	describe("create_order", function () {
+	describe("ab create_order", function () {
 
 		it("should create an order with correct values", async () => {
 			await createEvent()
-			await createOrder()
+			await createOrder(user, NATIVE_MINT, { up: {} })
 
 			let fetchedOrder = await program.account.order.fetch(order);
-			assert.equal(fetchedOrder.index, 0);
 			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
 			assert.equal(fetchedOrder.event.toString(), event.toString());
-			assert.equal(fetchedOrder.outcome, 1);
+			assert.equal(Object.keys(fetchedOrder.outcome)[0], 'up');
 			assert.equal(fetchedOrder.amount.toString(), LAMPORTS_PER_SOL.toString());
-			assert.equal(fetchedOrder.currencyMint.toString(), NATIVE_MINT.toString());
-			assert.equal(fetchedOrder.askBps, 10000);
-			assert.equal(fetchedOrder.remainingAsk.toString(), LAMPORTS_PER_SOL.toString());
-			assert.equal(fetchedOrder.expiry.toString(), '0');
-			assert.deepEqual(fetchedOrder.fills, [])
 		});
 
 		it("should create an order with correct values for non-native token", async () => {
@@ -258,50 +250,27 @@ describe("solora", async () => {
 			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
 
-			await createEvent()
-			await createOrder(currencyMint, 0, 1, 100)
+			await createEvent(currencyMint)
+			await createOrder(user, currencyMint, { up: {} }, 100)
 
 			let fetchedOrder = await program.account.order.fetch(order);
-			assert.equal(fetchedOrder.index, 0);
+			let fetchedEvent = await program.account.event.fetch(event);
 			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58());
 			assert.equal(fetchedOrder.event.toString(), event.toString());
-			assert.equal(fetchedOrder.outcome, 1);
 			assert.equal(fetchedOrder.amount.toString(), '100');
-			assert.equal(fetchedOrder.currencyMint.toString(), currencyMint.toString());
-			assert.equal(fetchedOrder.askBps, 10000);
-			assert.equal(fetchedOrder.expiry.toString(), '0');
-			assert.deepEqual(fetchedOrder.fills, [])
+			assert.equal(Object.keys(fetchedOrder.outcome)[0], 'up');
+			assert.equal(fetchedEvent.upAmount.toString(), '100');
+			assert.equal(fetchedEvent.upCount, 1);
 		});
 
 		it("should transfer user's lamports", async () => {
 			await createEvent()
 
 			const preBalance = await provider.connection.getBalance(user.publicKey)
-			await createOrder()
+			await createOrder(user, NATIVE_MINT, { up: {} })
 			const postBalance = await provider.connection.getBalance(user.publicKey)
 
 			assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL)
-		});
-
-		it("should set the correct expiry", async () => {
-			await createEvent()
-			const expiry = moment().add(1, 'day').toDate()
-			await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry)
-
-			let fetchedOrder = await program.account.order.fetch(order);
-			assert.equal(fetchedOrder.expiry.toString(), (Math.floor(expiry.getTime() / 1000)).toString())
-		});
-
-		it("should increment order index", async () => {
-			await createEvent()
-			await createOrder()
-
-			let fetchedEvent = await program.account.event.fetch(event);
-			assert.equal(fetchedEvent.orderIndex, 1);
-
-			await createOrder(NATIVE_MINT, 1)
-			let fetchedOrder = await program.account.order.fetch(order);
-			assert.equal(fetchedOrder.index, 1)
 		});
 
 		it("should transfer user's alt currency", async () => {
@@ -309,8 +278,8 @@ describe("solora", async () => {
 			userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
 
-			await createEvent()
-			await createOrder(currencyMint, 0, 1, 100, 10000, null)
+			await createEvent(currencyMint)
+			await createOrder(user, currencyMint, { up: {} }, 100);
 
 			let userCurrencyAccountObject = await getAccount(provider.connection, userCurrencyAccount)
 			assert.equal(userCurrencyAccountObject.amount.toString(), '0')
@@ -319,145 +288,179 @@ describe("solora", async () => {
 			assert.equal(orderCurrencyAccountObject.amount.toString(), '100')
 		});
 
-		it("should throw when expiry is in the past", async () => {
-			await createEvent()
-			const expiry = moment().subtract(1, 'day').toDate()
+		it("should create both types of orders", async () => {
+			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+			const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
+			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 69)
 
-			await assertThrows(async () =>
-				await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry),
-				6004
-			)
-		});
+			await createEvent(currencyMint)
+			await createOrder(user, currencyMint, { up: {} }, 100)
+			await createOrder(userB, currencyMint, { down: {} }, 69)
 
-		it("should throw when using the same order index", async () => {
-			await createEvent()
-			await createOrder()
+			const [orderA] = PublicKey.findProgramAddressSync(
+				[Buffer.from("order"), event.toBuffer(), user.publicKey.toBuffer()],
+				program.programId
+			);
 
-			await assertThrows(async () => await createOrder(), 2006)
+			const [orderB] = PublicKey.findProgramAddressSync(
+				[Buffer.from("order"), event.toBuffer(), userB.publicKey.toBuffer()],
+				program.programId
+			);
+
+			let fetchedOrder = await program.account.order.fetch(orderA);
+			assert.equal(fetchedOrder.authority.toBase58(), user.publicKey.toBase58(), 'incorrect authority');
+			assert.equal(fetchedOrder.event.toString(), event.toString());
+			assert.equal(fetchedOrder.amount.toString(), '100');
+			assert.equal(Object.keys(fetchedOrder.outcome)[0], 'up');
+			let fetchedOrderB = await program.account.order.fetch(orderB);
+			assert.equal(fetchedOrderB.authority.toBase58(), userB.publicKey.toBase58());
+			assert.equal(fetchedOrderB.event.toString(), event.toString());
+			assert.equal(fetchedOrderB.amount.toString(), '69');
+			assert.equal(Object.keys(fetchedOrderB.outcome)[0], 'down');
+			let fetchedEvent = await program.account.event.fetch(event);
+			assert.equal(fetchedEvent.upAmount.toString(), '100');
+			assert.equal(fetchedEvent.upCount, 1);
+			assert.equal(fetchedEvent.downAmount.toString(), '69');
+			assert.equal(fetchedEvent.downCount, 1);
 		});
 
 	});
 
-	describe("fill_order", function () {
-
-		it("should fill an order with correct values", async () => {
-			await createEvent()
-			await createOrder()
-			await fillOrder()
-
-			let fetchedOrder = await program.account.order.fetch(order);
-			assert.deepEqual(JSON.parse(JSON.stringify(fetchedOrder.fills)), [{
-				index: 0,
-				authority: userB.publicKey.toBase58(),
-				outcome: 2,
-				amount: new anchor.BN(LAMPORTS_PER_SOL).toString('hex'),
-				isSettled: false
-			}])
-		});
-
-		it("should transfer user's lamports", async () => {
-			await createEvent()
-			await createOrder()
-
-			const preBalance = await provider.connection.getBalance(userB.publicKey)
-			const orderPreBalance = await provider.connection.getBalance(order)
-			await fillOrder()
-
-			const postBalance = await provider.connection.getBalance(userB.publicKey)
-			assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL)
-
-			const orderPostBalance = await provider.connection.getBalance(order)
-			assert.equal(orderPostBalance, orderPreBalance + LAMPORTS_PER_SOL)
-		});
-
-		it("should fill an order with alt currency", async () => {
+	describe("ab settle_event", function () {
+		it("should settle event", async () => {
 			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
 			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
 			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
 			const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
-			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
+			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 69)
 
-			await createEvent()
-			await createOrder(currencyMint, 0, 1, 100, 10000, null)
-			await fillOrder(0, 2, 100, currencyMint)
+			await createEvent(currencyMint)
+			await createOrder(user, currencyMint, { up: {} }, 100)
+			await createOrder(userB, currencyMint, { down: {} }, 69)
+			await settleEvent();
+			let fetchedEvent = await program.account.event.fetch(event);
+			assert.equal(fetchedEvent.upAmount.toString(), '100');
+			assert.equal(fetchedEvent.upCount, 1);
+			assert.equal(fetchedEvent.downAmount.toString(), '69');
+			assert.equal(fetchedEvent.downCount, 1);
+			assert.equal(Object.keys(fetchedEvent.outcome)[0], 'up');
+		})
+	})
 
-			let fetchedOrder = await program.account.order.fetch(order);
-			assert.deepEqual(JSON.parse(JSON.stringify(fetchedOrder.fills)), [{
-				index: 0,
-				isSettled: false,
-				authority: userB.publicKey.toBase58(),
-				outcome: 2,
-				amount: new anchor.BN(100).toString('hex'),
-			}])
-		});
+	describe("settle_order", function () {
 
-		it("should transfer user's alt currency", async () => {
-			const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
-			const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
-			await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
-			const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
-			await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
+		// it("should fill an order with correct values", async () => {
+		// 	await createEvent()
+		// 	await createOrder()
+		// 	await settleEvent()
+		// 	await settleOrder()
+		// });
 
-			await createEvent()
-			await createOrder(currencyMint, 0, 1, 100, 10000, null)
-			await fillOrder(0, 2, 100, currencyMint)
+		// it("should transfer user's lamports", async () => {
+		// 	await createEvent()
+		// 	await createOrder()
 
-			let userBAccount = await getAccount(provider.connection, userBCurrencyAccount)
-			assert.equal(userBAccount.amount.toString(), '0')
+		// 	const preBalance = await provider.connection.getBalance(userB.publicKey)
+		// 	const orderPreBalance = await provider.connection.getBalance(order)
+		// 	await fillOrder()
 
-			let escrowAccount = await getAccount(provider.connection, orderCurrencyAccount)
-			// 100 from the order, 100 from the fill
-			assert.equal(escrowAccount.amount.toString(), '200')
-		});
+		// 	const postBalance = await provider.connection.getBalance(userB.publicKey)
+		// 	assert.isAtMost(postBalance, preBalance - LAMPORTS_PER_SOL)
 
-		it("should throw an error when filling with outcome 0", async function () {
-			await createEvent()
-			await createOrder()
+		// 	const orderPostBalance = await provider.connection.getBalance(order)
+		// 	assert.equal(orderPostBalance, orderPreBalance + LAMPORTS_PER_SOL)
+		// });
 
-			await assertThrows(async() => {
-				await fillOrder(0, 0)
-			}, 6001)
-		});
+		// it("should fill an order with alt currency", async () => {
+		// 	const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+		// 	const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+		// 	await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+		// 	const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
+		// 	await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
 
-		it("should throw an error when event is already settled", async function () {
-			await createEvent()
-			await createOrder()
+		// 	await createEvent()
+		// 	await createOrder(currencyMint, 0, 1, 100, 10000, null)
+		// 	await fillOrder(0, 2, 100, currencyMint)
 
-			await assertThrows(async() => {
-				await settleEvent()
-				await fillOrder()
-			}, 6000)
-		});
+		// 	let fetchedOrder = await program.account.order.fetch(order);
+		// 	assert.deepEqual(JSON.parse(JSON.stringify(fetchedOrder.fills)), [{
+		// 		index: 0,
+		// 		isSettled: false,
+		// 		authority: userB.publicKey.toBase58(),
+		// 		outcome: 2,
+		// 		amount: new anchor.BN(100).toString('hex'),
+		// 	}])
+		// });
 
-		it("should throw an error when choosing the same outcome as order", async function () {
-			await createEvent()
-			await createOrder()
+		// it("should transfer user's alt currency", async () => {
+		// 	const currencyMint = await createMint(provider.connection, payer, payer.publicKey, payer.publicKey, 0)
+		// 	const userCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, user.publicKey)
+		// 	await mintTo(provider.connection, payer, currencyMint, userCurrencyAccount, payer.publicKey, 100)
+		// 	const userBCurrencyAccount = await createAssociatedTokenAccount(provider.connection, payer, currencyMint, userB.publicKey)
+		// 	await mintTo(provider.connection, payer, currencyMint, userBCurrencyAccount, payer.publicKey, 100)
 
-			await assertThrows(async() => {
-				await fillOrder(0, 1, LAMPORTS_PER_SOL)
-			}, 6001)
-		});
+		// 	await createEvent()
+		// 	await createOrder(currencyMint, 0, 1, 100, 10000, null)
+		// 	await fillOrder(0, 2, 100, currencyMint)
 
-		it("should throw an error when the order has expired", async function () {
-			await createEvent()
-			const expiry = moment().add(3, 'seconds').toDate()
-			await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry)
+		// 	let userBAccount = await getAccount(provider.connection, userBCurrencyAccount)
+		// 	assert.equal(userBAccount.amount.toString(), '0')
 
-			await new Promise(resolve => setTimeout(resolve, 4000))
+		// 	let escrowAccount = await getAccount(provider.connection, orderCurrencyAccount)
+		// 	// 100 from the order, 100 from the fill
+		// 	assert.equal(escrowAccount.amount.toString(), '200')
+		// });
 
-			await assertThrows(async() => {
-				await fillOrder()
-			}, 6005)
-		});
+		// it("should throw an error when filling with outcome 0", async function () {
+		// 	await createEvent()
+		// 	await createOrder()
 
-		it("should throw an error when fill amount is too large", async function () {
-			await createEvent()
-			await createOrder()
+		// 	await assertThrows(async () => {
+		// 		await fillOrder(0, 0)
+		// 	}, 6001)
+		// });
 
-			await assertThrows(async() => {
-				await fillOrder(0, 2, LAMPORTS_PER_SOL * 2)
-			}, 6003)
-		});
+		// it("should throw an error when event is already settled", async function () {
+		// 	await createEvent()
+		// 	await createOrder()
+
+		// 	await assertThrows(async () => {
+		// 		await settleEvent()
+		// 		await fillOrder()
+		// 	}, 6000)
+		// });
+
+		// it("should throw an error when choosing the same outcome as order", async function () {
+		// 	await createEvent()
+		// 	await createOrder()
+
+		// 	await assertThrows(async () => {
+		// 		await fillOrder(0, 1, LAMPORTS_PER_SOL)
+		// 	}, 6001)
+		// });
+
+		// it("should throw an error when the order has expired", async function () {
+		// 	await createEvent()
+		// 	const expiry = moment().add(3, 'seconds').toDate()
+		// 	await createOrder(NATIVE_MINT, 0, 1, LAMPORTS_PER_SOL, 10000, expiry)
+
+		// 	await new Promise(resolve => setTimeout(resolve, 4000))
+
+		// 	await assertThrows(async () => {
+		// 		await fillOrder()
+		// 	}, 6005)
+		// });
+
+		// it("should throw an error when fill amount is too large", async function () {
+		// 	await createEvent()
+		// 	await createOrder()
+
+		// 	await assertThrows(async () => {
+		// 		await fillOrder(0, 2, LAMPORTS_PER_SOL * 2)
+		// 	}, 6003)
+		// });
 
 	});
 

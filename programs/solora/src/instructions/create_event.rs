@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::Mint;
 use crate::state::{Event, EVENT_SIZE, Outcome};
 use crate::error::Error;
 
@@ -20,6 +21,8 @@ pub struct CreateEvent<'info> {
         payer = payer,
     )]
     pub event: Box<Account<'info, Event>>,
+
+    pub currency_mint: Account<'info, Mint>,
 
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -49,6 +52,7 @@ pub fn create_event<'info>(
     event.close_time = close_time;
     event.metadata_uri = metadata_uri;
     event.outcome = Outcome::Undrawn;
+    event.currency_mint = ctx.accounts.currency_mint.key();
 
     Ok(())
 }

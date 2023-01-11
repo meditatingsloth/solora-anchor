@@ -7,7 +7,7 @@ mod error;
 mod instructions;
 mod util;
 
-declare_id!("8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS");
+declare_id!("14SStXZMvqahGWKeU3699C6of1dcmvvaa3b5ESsvz6U2");
 
 #[program]
 pub mod solora {
@@ -34,7 +34,7 @@ pub mod solora {
         instructions::create_order(ctx, outcome, amount)
     }
 
-    pub fn fill_order<'info>(
+    pub fn settle_order<'info>(
         ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>,
     ) -> Result<()> {
         instructions::settle_order(ctx)
