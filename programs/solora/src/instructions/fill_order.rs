@@ -37,11 +37,17 @@ pub fn fill_order<'info>(
     outcome: u8,
     amount: u64,
 ) -> Result<()> {
+    let timestamp = Clock::get()?.unix_timestamp;
+
     if ctx.accounts.order.expiry != 0 {
-        let timestamp = Clock::get()?.unix_timestamp;
         if ctx.accounts.order.expiry <= timestamp {
             return err!(Error::OrderExpired);
         }
+    }
+
+    if ctx.accounts.event.close_time != 0 &&
+        timestamp >= ctx.accounts.event.close_time {
+        return err!(Error::EventClosed);
     }
 
     if amount > ctx.accounts.order.remaining_ask {

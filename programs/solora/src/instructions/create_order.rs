@@ -34,11 +34,17 @@ pub fn create_order<'info>(
     ask_bps: u32,
     expiry: i64
 ) -> Result<()> {
+    let timestamp = Clock::get()?.unix_timestamp;
+
     if expiry != 0 {
-        let timestamp = Clock::get()?.unix_timestamp;
         if expiry <= timestamp {
             return err!(Error::InvalidExpiry);
         }
+    }
+
+    if ctx.accounts.event.close_time != 0 &&
+        timestamp >= ctx.accounts.event.close_time {
+        return err!(Error::EventClosed);
     }
 
     if outcome == 0 {

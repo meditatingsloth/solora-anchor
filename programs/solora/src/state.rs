@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 1 + 4 + 32 + 32 + 1 + 32 + 4 + (4 + 200);
+pub const EVENT_SIZE: usize = 8 + 1 + 1 + 4 + 32 + 32 + 1 + 32 + 32 + 4 + (4 + 200);
 
 #[account]
 pub struct Event {
@@ -19,6 +19,8 @@ pub struct Event {
     pub fee_account: Pubkey,
     /// Fee rate in bps
     pub fee_bps: u32,
+    /// Timestamp of when the event is closed to new orders/fills or 0 for never
+    pub close_time: i64,
     pub metadata_uri: String,
 }
 

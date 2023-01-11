@@ -85,8 +85,13 @@ describe("solora", async () => {
 			program.programId
 		);
 
-		const builder = program.methods.createEvent(eventId, feeAccount.publicKey, feeBps, metadataUri)
-			.accounts({
+		const builder = program.methods.createEvent(
+			eventId,
+			feeAccount.publicKey,
+			feeBps,
+			new anchor.BN(0),
+			metadataUri
+		).accounts({
 				payer: eventAuthority.publicKey,
 				authority: eventAuthority.publicKey,
 				event,
@@ -211,7 +216,7 @@ describe("solora", async () => {
 		return Math.floor(amount * feeBps / 10000);
 	}
 
-	describe("create_event", function () {
+	describe("ab create_event", function () {
 
 		it("should create an event with correct values", async () => {
 			await createEvent()

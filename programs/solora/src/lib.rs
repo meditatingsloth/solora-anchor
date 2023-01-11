@@ -17,9 +17,10 @@ pub mod solora {
         id: [u8; 32],
         fee_account: Pubkey,
         fee_bps: u32,
+        end_time: i64,
         metadata_uri: String,
     ) -> Result<()> {
-        instructions::create_event(ctx, id, fee_account, fee_bps, metadata_uri)
+        instructions::create_event(ctx, id, fee_account, fee_bps, end_time, metadata_uri)
     }
 
     pub fn create_order<'info>(

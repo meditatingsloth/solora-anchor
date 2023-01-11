@@ -33,4 +33,8 @@ pub enum Error {
     AmountLargerThanRemainingAsk,
     #[msg("The fill authority does not match")]
     InvalidFillAuthority,
+    #[msg("Invalid close time")]
+    InvalidCloseTime,
+    #[msg("Event has been closed")]
+    EventClosed,
 }
