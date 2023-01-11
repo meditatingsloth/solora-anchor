@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { Solora } from "../target/types/solora";
+import { SoloraOrderBook } from "../target/types/solora_order_book";
 import {LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
@@ -12,13 +12,13 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment";
 
-describe("solora", async () => {
+describe("solora-order-book", async () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true
 	anchor.setProvider(provider);
 
-	const program = anchor.workspace.Solora as anchor.Program<Solora>;
+	const program = anchor.workspace.SoloraOrderBook as anchor.Program<SoloraOrderBook>;
 
 	let eventId: number[];
 	let metadataUri: string;
@@ -216,7 +216,7 @@ describe("solora", async () => {
 		return Math.floor(amount * feeBps / 10000);
 	}
 
-	describe("ab create_event", function () {
+	describe("create_event", function () {
 
 		it("should create an event with correct values", async () => {
 			await createEvent()

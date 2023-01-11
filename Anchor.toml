@@ -3,12 +3,12 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-solora = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
+solora_order_book = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
 
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-#test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep ab"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+#test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts --grep ab"
