@@ -13,8 +13,8 @@ pub struct SettleEvent<'info> {
         seeds = [b"event".as_ref(), id.as_ref()],
         bump = event.bump[0],
         has_one = authority,
-        constraint = event.outcome != Outcome::Undrawn @ Error::EventSettled,
-        constraint = outcome == Outcome::Undrawn @ Error::InvalidOutcome,
+        constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
+        constraint = outcome != Outcome::Undrawn @ Error::InvalidOutcome,
     )]
     pub event: Box<Account<'info, Event>>,
 
