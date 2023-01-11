@@ -28,8 +28,8 @@ describe("solora", async () => {
 	let userCurrencyAccount: PublicKey;
 	let userBCurrencyAccount: PublicKey;
 
+	let eventAuthority = anchor.web3.Keypair.generate();
 	const payer = anchor.web3.Keypair.generate();
-	const eventAuthority = anchor.web3.Keypair.generate();
 	const user = anchor.web3.Keypair.generate();
 	const userB = anchor.web3.Keypair.generate();
 	let feeAccount = anchor.web3.Keypair.generate();
@@ -37,7 +37,7 @@ describe("solora", async () => {
 
 	before(async () => {
 		await Promise.all([payer, eventAuthority, user, userB].map(keypair => {
-			return provider.connection.requestAirdrop(keypair.publicKey, 10 * LAMPORTS_PER_SOL).then(sig =>
+			return provider.connection.requestAirdrop(keypair.publicKey, 100 * LAMPORTS_PER_SOL).then(sig =>
 				provider.connection.confirmTransaction(sig, "processed")
 			)
 		}))
