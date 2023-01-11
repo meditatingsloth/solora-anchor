@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, Order, ORDER_SIZE};
+use crate::state::{Event, Order, ORDER_SIZE, Outcome};
 use crate::error::Error;
-use crate::util::{transfer, transfer_sol};
+use crate::util::{transfer, transfer_sol, is_native_mint};
 
 #[derive(Accounts)]
 pub struct CreateOrder<'info> {
@@ -9,17 +9,17 @@ pub struct CreateOrder<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-    init,
-    seeds = [b"order".as_ref(), event.key().as_ref(), &event.order_index.to_le_bytes()],
-    bump,
-    space = ORDER_SIZE,
-    payer = authority,
+        init,
+        seeds = [b"order".as_ref(), event.key().as_ref(), authority.key().as_ref()],
+        bump,
+        space = ORDER_SIZE,
+        payer = authority,
     )]
     pub order: Box<Account<'info, Order>>,
 
     #[account(
-    mut,
-    constraint = event.outcome == 0 @ Error::EventSettled,
+        mut,
+        constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -29,58 +29,49 @@ pub struct CreateOrder<'info> {
 
 pub fn create_order<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateOrder<'info>>,
-    outcome: u8,
-    amount: u64,
-    ask_bps: u32,
-    expiry: i64
+    outcome: Outcome,
+    amount: u64
 ) -> Result<()> {
     let timestamp = Clock::get()?.unix_timestamp;
-
-    if expiry != 0 {
-        if expiry <= timestamp {
-            return err!(Error::InvalidExpiry);
-        }
-    }
-
     if ctx.accounts.event.close_time != 0 &&
         timestamp >= ctx.accounts.event.close_time {
         return err!(Error::EventClosed);
     }
 
-    if outcome == 0 {
+    if outcome == Outcome::Undrawn {
         return err!(Error::InvalidOutcome);
     }
 
-    let total_ask = (amount as u128)
-        .checked_mul(ask_bps as u128).unwrap()
-        .checked_div(10000 as u128).unwrap() as u64;
-    let order_obligation = (total_ask as u128)
-        .checked_mul(10000 as u128).unwrap()
-        .checked_div(ask_bps as u128).unwrap() as u64;
-
     let order = &mut ctx.accounts.order;
+    let event = &mut ctx.accounts.event;
     order.bump = [*ctx.bumps.get("order").unwrap()];
-    order.index = ctx.accounts.event.order_index;
     order.authority = ctx.accounts.authority.key();
-    order.event = ctx.accounts.event.key();
+    order.event = event.key();
     order.outcome = outcome;
-    order.amount = order_obligation;
-    order.ask_bps = ask_bps;
-    order.remaining_ask = total_ask;
-    order.expiry = expiry;
-    order.fills = Vec::new();
+    order.amount = amount;
+
+    if outcome == Outcome::Up {
+        event.up_amount += event.up_amount.checked_add(amount as u128).ok_or(Error::OverflowError)?;
+        event.up_count += 1;
+    }
+    else {
+        event.down_amount += event.down_amount.checked_add(amount as u128).ok_or(Error::OverflowError)?;
+        event.down_count += 1;
+    }
 
     // If there are remaining_accounts populated we're using an alt currency mint
     if ctx.remaining_accounts.len() == 0 {
+        if !is_native_mint(ctx.accounts.event.currency_mint) {
+            return err!(Error::InvalidMint);
+        }
         transfer_sol(
             &ctx.accounts.authority.to_account_info(),
             &order.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             None,
-            order_obligation,
+            amount,
         )?;
 
-        order.currency_mint = spl_token::native_mint::ID;
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
         let currency_mint = next_account_info(remaining_accounts)?;
@@ -89,6 +80,10 @@ pub fn create_order<'info>(
         let token_program = next_account_info(remaining_accounts)?;
         let ata_program = next_account_info(remaining_accounts)?;
         let rent = next_account_info(remaining_accounts)?;
+
+        if ctx.accounts.event.currency_mint != currency_mint.key() {
+            return err!(Error::InvalidMint);
+        }
 
         transfer(
             &ctx.accounts.authority.to_account_info(),
@@ -103,14 +98,10 @@ pub fn create_order<'info>(
             rent.into(),
             None,
             None,
-            order_obligation,
+            amount,
         )?;
 
-        order.currency_mint = currency_mint.key();
     }
-
-    ctx.accounts.event.order_index = ctx.accounts.event.order_index.checked_add(1)
-        .ok_or(Error::CalculationOverflow)?;
 
     Ok(())
 }

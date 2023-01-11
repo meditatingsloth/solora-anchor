@@ -8,13 +8,11 @@ pub struct Event {
     /// Bump seed used to generate the program address / authority
     pub bump: [u8; 1],
     pub version: u8,
-    /// Index to use for the next order created on this event
-    pub order_index: u32,
     pub authority: Pubkey,
     /// Bytes generated from sha256 of the event description
     pub id: [u8; 32],
     /// Outcome of the event or 0 if not yet resolved
-    pub outcome: u8,
+    pub outcome: Outcome,
     /// Account to receive fees
     pub fee_account: Pubkey,
     /// Fee rate in bps
@@ -22,6 +20,14 @@ pub struct Event {
     /// Timestamp of when the event is closed to new orders/fills or 0 for never
     pub close_time: i64,
     pub metadata_uri: String,
+    /// SPL token mint or native mint for SOL
+    pub currency_mint: Pubkey,
+    /// Store up and down bet amounts
+    pub up_amount: u128,
+    pub down_amount: u128,
+    // Store counts for UI
+    pub up_count: u32,
+    pub down_count: u32
 }
 
 impl Event {
@@ -41,20 +47,10 @@ pub struct Order {
     /// Bump seed used to generate the program address / authority
     pub bump: [u8; 1],
     pub version: u8,
-    /// Index of this order within the event. Allows a user to create multiple orders.
-    pub index: u32,
     pub authority: Pubkey,
     pub event: Pubkey,
-    pub outcome: u8,
-    pub amount: u64,
-    /// SPL token mint or native mint for SOL
-    pub currency_mint: Pubkey,
-    pub ask_bps: u32,
-    pub remaining_ask: u64,
-    /// Expires any remaining bet_amount after this timestamp or 0 if never expires
-    pub expiry: i64,
-    /// Used instead of separate accounts to reduce number of accounts needed when settling
-    pub fills: Vec<Fill>
+    pub outcome: Outcome,
+    pub amount: u64
 }
 
 impl Order {
@@ -62,15 +58,11 @@ impl Order {
         ORDER_SIZE + (fill_len * FILL_SIZE)
     }
 
-    pub fn get_fill_index(&self, authority: Pubkey) -> Option<usize> {
-        self.fills.iter().position(|fill| fill.authority == authority)
-    }
-
-    pub fn auth_seeds<'a>(&'a self, index_bytes: &'a [u8]) -> [&'a [u8]; 4] {
+    pub fn auth_seeds<'a>(&'a self) -> [&'a [u8]; 4] {
         [
             b"order".as_ref(),
             self.event.as_ref(),
-            index_bytes,
+            self.authority.as_ref(),
             self.bump.as_ref()
         ]
     }
@@ -85,4 +77,11 @@ pub struct Fill {
     pub outcome: u8,
     pub amount: u64,
     pub is_settled: bool
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Debug)]
+pub enum Outcome {
+    Undrawn,
+    Up,
+    Down,
 }

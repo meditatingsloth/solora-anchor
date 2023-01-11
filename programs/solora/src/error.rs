@@ -37,4 +37,10 @@ pub enum Error {
     InvalidCloseTime,
     #[msg("Event has been closed")]
     EventClosed,
+
+    /// 15
+    #[msg("Invalid token mint")]
+    InvalidMint,
+    #[msg("Overflow error")]
+    OverflowError,
 }

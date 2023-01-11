@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, EVENT_SIZE};
+use crate::state::{Event, EVENT_SIZE, Outcome};
 use crate::error::Error;
 
 #[derive(Accounts)]
@@ -13,11 +13,11 @@ pub struct CreateEvent<'info> {
     pub authority: UncheckedAccount<'info>,
 
     #[account(
-    init,
-    seeds = [b"event".as_ref(), id.as_ref()],
-    bump,
-    space = EVENT_SIZE,
-    payer = payer,
+        init,
+        seeds = [b"event".as_ref(), id.as_ref()],
+        bump,
+        space = EVENT_SIZE,
+        payer = payer,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -48,6 +48,7 @@ pub fn create_event<'info>(
     event.fee_bps = fee_bps;
     event.close_time = close_time;
     event.metadata_uri = metadata_uri;
+    event.outcome = Outcome::Undrawn;
 
     Ok(())
 }
