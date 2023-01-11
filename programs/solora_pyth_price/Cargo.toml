@@ -1,0 +1,29 @@
+[package]
+description = "A crypto price prediction game using pyth oracles"
+edition = "2021"
+name = "solora_pyth_price"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "solora_pyth_price"
+
+[features]
+cpi = ["no-entrypoint"]
+default = []
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = "0.26.0"
+anchor-spl = "0.26.0"
+arrayref = "0.3.6"
+solana-program = "^1.13.0"
+spl-math = {version = "0.1", features = ["no-entrypoint"]}
+spl-token = "^3.5.0"
+spl-associated-token-account = {version = "^1.0.5", features = ["no-entrypoint"]}
+
+[dev-dependencies]
+proptest = "1.0"
+roots = "0.0.7"

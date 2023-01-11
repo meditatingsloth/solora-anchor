@@ -4,6 +4,7 @@ skip-lint = false
 
 [programs.localnet]
 solora_order_book = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
+solora_pyth_price = "14SStXZMvqahGWKeU3699C6of1dcmvvaa3b5ESsvz6U2"
 
 [provider]
 cluster = "localnet"

@@ -12,7 +12,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment";
 
-describe("solora-order-book", async () => {
+describe("solora_order_book", async () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true
