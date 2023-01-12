@@ -11,19 +11,21 @@ declare_id!("14SStXZMvqahGWKeU3699C6of1dcmvvaa3b5ESsvz6U2");
 
 #[program]
 pub mod solora_pyth_price {
-    use crate::state::Outcome;
-
     use super::*;
 
     pub fn create_event<'info>(
         ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
-        id: [u8; 32],
-        fee_account: Pubkey,
+        lock_time: i64,
+        wait_period: u32,
         fee_bps: u32,
-        end_time: i64,
-        metadata_uri: String,
     ) -> Result<()> {
-        instructions::create_event(ctx, id, fee_account, fee_bps, end_time, metadata_uri)
+        instructions::create_event(ctx, lock_time, wait_period, fee_bps)
+    }
+
+    pub fn set_lock_price<'info>(
+        ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>>,
+    ) -> Result<()> {
+        instructions::set_lock_price(ctx)
     }
 
     pub fn create_order<'info>(
@@ -42,9 +44,7 @@ pub mod solora_pyth_price {
 
     pub fn settle_event<'info>(
         ctx: Context<'_, '_, '_, 'info, SettleEvent<'info>>,
-        id: [u8; 32],
-        outcome: Outcome
     ) -> Result<()> {
-        instructions::settle_event(ctx, id, outcome)
+        instructions::settle_event(ctx)
     }
 }

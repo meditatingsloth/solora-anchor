@@ -33,14 +33,26 @@ pub enum Error {
     AmountLargerThanRemainingAsk,
     #[msg("The fill authority does not match")]
     InvalidFillAuthority,
-    #[msg("Invalid close time")]
-    InvalidCloseTime,
-    #[msg("Event has been closed")]
-    EventClosed,
+    #[msg("Invalid lock time")]
+    InvalidLockTime,
+    #[msg("Event has been locked")]
+    EventLocked,
 
     /// 15
     #[msg("Invalid token mint")]
     InvalidMint,
     #[msg("Overflow error")]
     OverflowError,
+    #[msg("The event has not been locked yet")]
+    EventNotLocked,
+    #[msg("The lock price has already been set")]
+    LockPriceSet,
+    #[msg("Invalid price")]
+    InvalidPrice,
+
+    /// 20
+    #[msg("The lock price has not been set")]
+    LockPriceNotSet,
+    #[msg("The event is still in the waiting period")]
+    EventInWaitingPeriod
 }

@@ -23,7 +23,7 @@ pub struct SettleOrder<'info> {
     #[account(
         mut,
         constraint = event.outcome != Outcome::Undrawn @ Error::EventNotSettled,
-        constraint = order.outcome == event.outcome @ Error::InvalidOutcome,
+        constraint = event.outcome == Outcome::Invalid || order.outcome == event.outcome @ Error::InvalidOutcome,
         has_one = fee_account
     )]
     pub event: Box<Account<'info, Event>>,
@@ -34,11 +34,6 @@ pub struct SettleOrder<'info> {
 
 pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) -> Result<()> {
     let event = &ctx.accounts.event;
-    let timestamp = Clock::get()?.unix_timestamp;
-
-    if ctx.accounts.event.close_time != 0 && timestamp >= ctx.accounts.event.close_time {
-        return err!(Error::EventClosed);
-    }
 
     let (winning_pool, losing_pool): (u128, u128);
 
@@ -50,24 +45,32 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
         winning_pool = event.down_amount;
     }
 
-    // Divide the losing pool by winning for multiplier
-    let mut amount = u64::try_from(
+    let mut amount = if event.outcome == Outcome::Invalid {
+        ctx.accounts.order.amount
+    } else {
+        // Divide the losing pool by winning for multiplier
         (ctx.accounts.order.amount as u128)
             .checked_mul(losing_pool)
             .ok_or(Error::OverflowError)?
             .checked_div(winning_pool)
-            .ok_or(Error::OverflowError)?,
-    )
-    .map_err(|_| Error::OverflowError)?;
+            .ok_or(Error::OverflowError)? as u64
+    };
 
     let is_native = is_native_mint(event.currency_mint);
     let seeds = ctx.accounts.order.auth_seeds();
 
-    let fee = amount
-        .checked_mul(ctx.accounts.event.fee_bps as u64)
-        .ok_or(Error::OverflowError)?
-        .checked_div(10000)
-        .ok_or(Error::OverflowError)?;
+    let fee = if event.outcome == Outcome::Invalid {
+        0
+    } else {
+        amount.checked_mul(ctx.accounts.event.fee_bps as u64)
+            .ok_or(Error::OverflowError)?
+            .checked_div(10000)
+            .ok_or(Error::OverflowError)?
+    };
+
+    if fee > 0 {
+        amount = amount.checked_sub(fee).unwrap();
+    }
 
     let remaining_accounts = &mut ctx.remaining_accounts.iter();
     let (
@@ -91,10 +94,6 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     } else {
         (None, None, None, None, None, None, None)
     };
-
-    if fee > 0 {
-        amount = amount.checked_sub(fee).unwrap();
-    }
 
     transfer(
         &ctx.accounts.order.to_account_info(),

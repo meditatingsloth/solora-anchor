@@ -33,12 +33,12 @@ pub fn create_order<'info>(
     amount: u64
 ) -> Result<()> {
     let timestamp = Clock::get()?.unix_timestamp;
-    if ctx.accounts.event.close_time != 0 &&
-        timestamp >= ctx.accounts.event.close_time {
-        return err!(Error::EventClosed);
+    if timestamp >= ctx.accounts.event.lock_time {
+        return err!(Error::EventLocked);
     }
 
-    if outcome == Outcome::Undrawn {
+    if outcome == Outcome::Undrawn ||
+        outcome == Outcome::Invalid {
         return err!(Error::InvalidOutcome);
     }
 
@@ -100,7 +100,6 @@ pub fn create_order<'info>(
             None,
             amount,
         )?;
-
     }
 
     Ok(())

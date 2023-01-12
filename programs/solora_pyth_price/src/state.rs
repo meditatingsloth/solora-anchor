@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 1 + 4 + 32 + 32 + 1 + 32 + 32 + 4 + (4 + 200);
+pub const EVENT_SIZE: usize = 8 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 4 + 32 + 8 + 8 + 2 + 16 + 16 + 8 + 8 + 256;
 
 #[account]
 pub struct Event {
@@ -10,31 +10,39 @@ pub struct Event {
     pub version: u8,
     pub authority: Pubkey,
     /// Bytes generated from sha256 of the event description
-    pub id: [u8; 32],
-    /// Outcome of the event or 0 if not yet resolved
-    pub outcome: Outcome,
+    pub pyth_feed: Pubkey,
     /// Account to receive fees
     pub fee_account: Pubkey,
     /// Fee rate in bps
     pub fee_bps: u32,
-    /// Timestamp of when the event is closed to new orders/fills or 0 for never
-    pub close_time: i64,
-    pub metadata_uri: String,
-    /// SPL token mint or native mint for SOL
+    /// Timestamp of when the event is closed to new orders (start of waiting period)
+    pub lock_time: i64,
+    /// Seconds to wait after locking and before closing
+    pub wait_period: u32,
+    /// SPL token mint or native mint for SOL for the pool bets
     pub currency_mint: Pubkey,
+    /// Price of the pyth feed at the time of lock
+    pub lock_price: u64,
+    /// Price of the pyth feed at the time of settlement
+    pub settled_price: u64,
+    /// Outcome of the event or 0 if not yet resolved
+    pub outcome: Outcome,
     /// Store up and down bet amounts
     pub up_amount: u128,
     pub down_amount: u128,
-    // Store counts for UI
+    /// Store counts for UI
     pub up_count: u32,
     pub down_count: u32
 }
 
 impl Event {
-    pub fn auth_seeds(&self) -> [&[u8]; 3] {
+    pub fn auth_seeds<'a>(&'a self, lock_time_bytes: &'a [u8]) -> [&'a[u8]; 6] {
         [
             b"event".as_ref(),
-            self.id.as_ref(),
+            self.pyth_feed.as_ref(),
+            self.fee_account.as_ref(),
+            self.currency_mint.as_ref(),
+            lock_time_bytes,
             self.bump.as_ref()
         ]
     }
@@ -82,6 +90,7 @@ pub struct Fill {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Debug)]
 pub enum Outcome {
     Undrawn,
+    Invalid,
     Up,
     Down,
 }

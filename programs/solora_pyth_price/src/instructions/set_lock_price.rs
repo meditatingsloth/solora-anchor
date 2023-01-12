@@ -1,11 +1,12 @@
-use anchor_lang::prelude::*;
-use pyth_sdk_solana::load_price_feed_from_account_info;
-use crate::state::{Event, Outcome};
 use crate::error::Error;
+use crate::state::{Event, Outcome, EVENT_SIZE};
+use anchor_lang::prelude::*;
+use anchor_spl::token::Mint;
+use pyth_sdk_solana::load_price_feed_from_account_info;
 
 #[derive(Accounts)]
-#[instruction(id: [u8; 32], outcome: Outcome)]
-pub struct SettleEvent<'info> {
+#[instruction(id: [u8; 32])]
+pub struct SetLockPrice<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -13,24 +14,24 @@ pub struct SettleEvent<'info> {
         mut,
         has_one = authority,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
-        constraint = event.lock_price > 0 @ Error::LockPriceNotSet,
+        constraint = event.lock_price == 0 @ Error::LockPriceSet,
     )]
     pub event: Box<Account<'info, Event>>,
 
     /// CHECK: TODO: Does pyth do their own validation when reading price?
     pub pyth_price_feed: UncheckedAccount<'info>,
 
-    pub system_program: Program<'info, System>,
+    pub system_program: Program<'info, System>
 }
 
-pub fn settle_event<'info>(
-    ctx: Context<'_, '_, '_, 'info, SettleEvent<'info>>,
+pub fn set_lock_price<'info>(
+    ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>>,
 ) -> Result<()> {
     let event = &mut ctx.accounts.event;
 
     let timestamp = Clock::get()?.unix_timestamp;
-    if timestamp < event.lock_time + event.wait_period as i64  {
-        return err!(Error::EventInWaitingPeriod);
+    if event.lock_time > timestamp {
+        return err!(Error::EventNotLocked);
     }
 
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_price_feed.to_account_info()).unwrap();
@@ -43,15 +44,7 @@ pub fn settle_event<'info>(
             msg!("Negative price: {}", price.price);
             event.outcome = Outcome::Invalid;
         } else {
-            event.settled_price = price.price as u64;
-
-            event.outcome = if event.settled_price == event.lock_price {
-                Outcome::Invalid
-            } else if event.settled_price > event.lock_price {
-                Outcome::Up
-            } else {
-                Outcome::Down
-            };
+            event.lock_price = price.price as u64;
         }
     } else {
         msg!("No price found");
