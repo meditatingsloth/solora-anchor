@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 4 + 32 + 8 + 8 + 2 + 16 + 16 + 8 + 8 + 256;
+pub const EVENT_SIZE: usize = 8 + 1 + 1 + 32 + 32 + 32 + 32 + 32 + 4 + 8 + 4 + 32 + 8 + 8 + 2 + 16 + 16 + 8 + 8 + 256;
 
 #[account]
 pub struct Event {
@@ -9,6 +9,10 @@ pub struct Event {
     pub bump: [u8; 1],
     pub version: u8,
     pub authority: Pubkey,
+    /// Clockwork thread that will perform the lock price update
+    pub lock_thread: Pubkey,
+    /// Clockwork thread that will perform the settle event update
+    pub settle_thread: Pubkey,
     /// Bytes generated from sha256 of the event description
     pub pyth_feed: Pubkey,
     /// Account to receive fees

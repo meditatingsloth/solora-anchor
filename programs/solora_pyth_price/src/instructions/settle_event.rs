@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use clockwork_sdk::state::{Thread};
 use pyth_sdk_solana::load_price_feed_from_account_info;
 use crate::state::{Event, Outcome};
 use crate::error::Error;
@@ -6,22 +7,24 @@ use crate::error::Error;
 #[derive(Accounts)]
 #[instruction(id: [u8; 32], outcome: Outcome)]
 pub struct SettleEvent<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-
     #[account(
         mut,
-        has_one = authority,
         has_one = pyth_feed,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
         constraint = event.lock_price > 0 @ Error::LockPriceNotSet,
     )]
     pub event: Box<Account<'info, Event>>,
 
-    /// CHECK: TODO: Does pyth do their own validation when reading price?
+    /// CHECK: Safe due to event constraint
     pub pyth_feed: UncheckedAccount<'info>,
 
-    pub system_program: Program<'info, System>,
+    #[account(
+        signer,
+        address = event.settle_thread,
+        constraint = thread.id.eq("event_settle"),
+        constraint = thread.authority == event.key()
+    )]
+    pub thread: Account<'info, Thread>,
 }
 
 pub fn settle_event<'info>(
@@ -35,7 +38,7 @@ pub fn settle_event<'info>(
     }
 
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
-    let price = price_feed.get_price_no_older_than(timestamp, 10);
+    let price = price_feed.get_price_no_older_than(timestamp, 30);
 
     // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
     if price.is_some() {

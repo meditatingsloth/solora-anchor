@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address;
 use anchor_spl::token;
 use anchor_spl::token::{Mint, Transfer};
-use solana_program::{pubkey::Pubkey, account_info::AccountInfo, pubkey, system_instruction};
+use solana_program::{pubkey::Pubkey, account_info::AccountInfo, system_instruction};
 use solana_program::program::{invoke, invoke_signed};
 use solana_program::program_pack::{IsInitialized, Pack};
 use spl_associated_token_account::instruction::create_associated_token_account;
@@ -20,24 +20,6 @@ pub enum UtilError {
     IncorrectOwner,
     #[msg("Account not initialized")]
     UninitializedAccount
-}
-
-pub fn transfer_from_pda(
-    source: &mut AccountInfo,
-    destination: &mut AccountInfo,
-    amount: u64,
-) -> Result<()> {
-    **source.try_borrow_mut_lamports()? = source
-        .lamports()
-        .checked_sub(amount)
-        .ok_or(UtilError::InvalidPDATransferSource)?;
-
-    **destination.try_borrow_mut_lamports()? = destination
-        .lamports()
-        .checked_add(amount)
-        .ok_or(UtilError::InvalidPDATransferDestination)?;
-
-    Ok(())
 }
 
 pub fn transfer_sol<'a>(
