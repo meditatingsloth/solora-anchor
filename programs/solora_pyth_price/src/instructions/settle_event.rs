@@ -12,13 +12,14 @@ pub struct SettleEvent<'info> {
     #[account(
         mut,
         has_one = authority,
+        has_one = pyth_feed,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
         constraint = event.lock_price > 0 @ Error::LockPriceNotSet,
     )]
     pub event: Box<Account<'info, Event>>,
 
     /// CHECK: TODO: Does pyth do their own validation when reading price?
-    pub pyth_price_feed: UncheckedAccount<'info>,
+    pub pyth_feed: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -33,7 +34,7 @@ pub fn settle_event<'info>(
         return err!(Error::EventInWaitingPeriod);
     }
 
-    let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_price_feed.to_account_info()).unwrap();
+    let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
     let price = price_feed.get_price_no_older_than(timestamp, 10);
 
     // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
