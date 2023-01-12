@@ -1,6 +1,7 @@
 import * as anchor from "@project-serum/anchor";
 import { SoloraPythPrice } from "../target/types/solora_pyth_price";
-import { LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import { Pyth } from "../target/types/pyth";
+import {LAMPORTS_PER_SOL, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
 import {
@@ -9,8 +10,8 @@ import {
 	getAssociatedTokenAddressSync, mintTo, NATIVE_MINT,
 	TOKEN_PROGRAM_ID
 } from "@solana/spl-token";
-import { v4 as uuidv4 } from 'uuid';
 import moment from "moment";
+import {mockOracle} from "./pythHelpers";
 
 describe("solora_pyth_price", async () => {
 
@@ -19,10 +20,10 @@ describe("solora_pyth_price", async () => {
 	anchor.setProvider(provider);
 
 	const program = anchor.workspace.SoloraPythPrice as anchor.Program<SoloraPythPrice>;
+	const defaultWaitPeriod = 1
 
-	let eventId: number[];
-	let metadataUri: string;
 	let event: PublicKey;
+	let pythFeed: PublicKey;
 	let order: PublicKey;
 	let orderCurrencyAccount: PublicKey;
 	let userCurrencyAccount: PublicKey;
@@ -34,6 +35,8 @@ describe("solora_pyth_price", async () => {
 	const userB = anchor.web3.Keypair.generate();
 	let feeAccount = anchor.web3.Keypair.generate();
 	let feeBps: number;
+	let pythPrice: number;
+	let lockTime: number;
 
 	before(async () => {
 		await Promise.all([payer, eventAuthority, user, userB].map(keypair => {
@@ -47,6 +50,7 @@ describe("solora_pyth_price", async () => {
 
 	async function setUpData() {
 		feeBps = 300
+		pythPrice = 50 * 10**5
 	}
 
 	function sha256(str: string) {
@@ -76,26 +80,38 @@ describe("solora_pyth_price", async () => {
 		assert.isTrue(throws, 'Expected error to be thrown')
 	}
 
-	async function createEvent(currencyMint = NATIVE_MINT) {
-		metadataUri = "https://example.com";
-		eventId = Array.from(sha256(uuidv4()));
+	async function createEvent(currencyMint = NATIVE_MINT, secondsUntilLock = 3, waitPeriod = defaultWaitPeriod) {
+		pythFeed = await mockOracle(
+			payer,
+			pythPrice,
+			-5,
+			100
+		);
+
+		lockTime = moment().unix() + secondsUntilLock;
 
 		[event] = PublicKey.findProgramAddressSync(
-			[Buffer.from("event"), Buffer.from(eventId)],
+			[
+				Buffer.from("event"),
+				pythFeed.toBuffer(),
+				feeAccount.publicKey.toBuffer(),
+				currencyMint.toBuffer(),
+				new anchor.BN(lockTime).toBuffer('le', 8),
+			],
 			program.programId
 		);
 
 		const builder = program.methods.createEvent(
-			eventId,
-			feeAccount.publicKey,
+			new anchor.BN(lockTime),
+			waitPeriod,
 			feeBps,
-			new anchor.BN(1704979142),
-			metadataUri
 		).accounts({
 			payer: eventAuthority.publicKey,
 			authority: eventAuthority.publicKey,
 			event,
-			currencyMint
+			pythFeed,
+			feeAccount: feeAccount.publicKey,
+			currencyMint,
 		})
 			.signers([eventAuthority])
 
@@ -155,6 +171,18 @@ describe("solora_pyth_price", async () => {
 		}
 	}
 
+	async function setLockPrice() {
+		await program.methods.setLockPrice()
+			.accounts({
+				authority: eventAuthority.publicKey,
+				event,
+				pythFeed,
+				systemProgram: SystemProgram.programId,
+			})
+			.signers([eventAuthority])
+			.rpc();
+	}
+
 	async function settleOrder(payer = user, currencyMint = NATIVE_MINT) {
 		[order] = PublicKey.findProgramAddressSync(
 			[Buffer.from("order"), event.toBuffer(), payer.publicKey.toBuffer()],
@@ -195,12 +223,12 @@ describe("solora_pyth_price", async () => {
 		await builder.rpc();
 	}
 
-	async function settleEvent(outcome = { up: {} }) {
-		const builder = program.methods.settleEvent(eventId, outcome)
+	async function settleEvent() {
+		const builder = program.methods.settleEvent()
 			.accounts({
 				authority: eventAuthority.publicKey,
 				event,
-				systemProgram: anchor.web3.SystemProgram.programId,
+				pythFeed,
 			})
 			.signers([eventAuthority])
 
@@ -218,16 +246,13 @@ describe("solora_pyth_price", async () => {
 
 			let fetchedEvent = await program.account.event.fetch(event);
 			assert.equal(fetchedEvent.authority.toBase58(), eventAuthority.publicKey.toBase58());
-			assert.equal(
-				Buffer.from(fetchedEvent.id).toString('hex'),
-				Buffer.from(eventId).toString('hex')
-			);
+			assert.equal(fetchedEvent.pythFeed.toBase58(), pythFeed.toBase58());
 			assert.equal(fetchedEvent.feeAccount.toBase58(), feeAccount.publicKey.toBase58());
 			assert.equal(fetchedEvent.feeBps, feeBps);
-			assert.equal(fetchedEvent.metadataUri, metadataUri);
-			assert.equal(fetchedEvent.closeTime.toNumber(), 1704979142);
-			assert.equal(Object.keys(fetchedEvent.outcome)[0], 'undrawn');
+			assert.notEqual(fetchedEvent.lockTime.toString(), '0');
+			assert.equal(fetchedEvent.waitPeriod, 1);
 			assert.equal(fetchedEvent.currencyMint.toBase58(), NATIVE_MINT.toBase58());
+			assert.equal(Object.keys(fetchedEvent.outcome)[0], 'undrawn');
 		});
 
 	});
@@ -324,6 +349,20 @@ describe("solora_pyth_price", async () => {
 			assert.equal(fetchedEvent.upCount, 1);
 			assert.equal(fetchedEvent.downAmount.toString(), '69');
 			assert.equal(fetchedEvent.downCount, 1);
+		});
+
+	});
+
+	describe("set_lock_price", function () {
+
+		it("ab should set the lock price", async () => {
+			await createEvent(NATIVE_MINT, 2, 0)
+			await new Promise(resolve => setTimeout(resolve, 2500));
+			await setLockPrice()
+
+			let fetchedEvent = await program.account.event.fetch(event);
+			assert.equal('undrawn', Object.keys(fetchedEvent.outcome)[0]);
+			assert.equal(pythPrice.toString(), fetchedEvent.lockPrice.toString());
 		});
 
 	});

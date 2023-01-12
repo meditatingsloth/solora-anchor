@@ -5,7 +5,6 @@ use anchor_spl::token::Mint;
 use pyth_sdk_solana::load_price_feed_from_account_info;
 
 #[derive(Accounts)]
-#[instruction(id: [u8; 32])]
 pub struct SetLockPrice<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
