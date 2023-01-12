@@ -1,7 +1,7 @@
 [package]
 description = "Predicition market for outcomes of events"
 edition = "2021"
-name = "solora_order_book"
+name = "solora-order-book"
 version = "0.1.0"
 
 [lib]

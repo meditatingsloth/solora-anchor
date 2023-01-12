@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { SoloraOrderBook } from "../target/types/solora_order_book";
+import { SoloraOrderBook } from "../target/types/solora-order-book";
 import {LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";
 import * as crypto from "crypto";
@@ -12,7 +12,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import moment from "moment";
 
-describe("solora_order_book", async () => {
+describe("solora-order-book", async () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true

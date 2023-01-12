@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { SoloraPythPrice } from "../target/types/solora_pyth_price";
+import { SoloraPythPrice } from "../target/types/solora-pyth-price";
 import { Pyth } from "../target/types/pyth";
 import {LAMPORTS_PER_SOL, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";
@@ -13,7 +13,7 @@ import {
 import moment from "moment";
 import {mockOracle} from "./pythHelpers";
 
-describe("solora_pyth_price", async () => {
+describe("solora-pyth-price", async () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true

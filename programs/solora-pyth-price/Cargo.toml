@@ -1,7 +1,7 @@
 [package]
 description = "A crypto price prediction game using pyth oracles"
 edition = "2021"
-name = "solora_pyth_price"
+name = "solora-pyth-price"
 version = "0.1.0"
 
 [lib]

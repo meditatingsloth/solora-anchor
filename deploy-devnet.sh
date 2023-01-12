@@ -1,6 +1,6 @@
 #!/usr/local/bin/bash
 
-PROGRAM_NAME="solora_pyth_price"
+PROGRAM_NAME="solora-pyth-price"
 
 solana config set --url https://api.devnet.solana.com
 anchor build

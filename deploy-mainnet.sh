@@ -1,6 +1,6 @@
 #!/usr/local/bin/bash
 
-PROGRAM_NAME="solora_pyth_price"
+PROGRAM_NAME="solora-pyth-price"
 
 solana config set --url https://west.sentries.io/2ceb6a385b424fa38ef3482f4a31e9c9
 anchor build
