@@ -13,6 +13,7 @@ use clockwork_sdk::{
 use solana_program::instruction::Instruction;
 use crate::state::{Event, EVENT_SIZE, Outcome};
 use crate::error::Error;
+use crate::util::transfer;
 
 #[derive(Accounts)]
 #[instruction(lock_time: i64)]
@@ -49,10 +50,16 @@ pub struct CreateEvent<'info> {
 
     pub currency_mint: Account<'info, Mint>,
 
-    #[account(address = Thread::pubkey(event.key(), "event_lock".into()))]
+    #[account(
+        mut,
+        address = Thread::pubkey(event.key(), "event_lock".into())
+    )]
     pub lock_thread: SystemAccount<'info>,
 
-    #[account(address = Thread::pubkey(event.key(), "event_settle".into()))]
+    #[account(
+        mut,
+        address = Thread::pubkey(event.key(), "event_settle".into())
+    )]
     pub settle_thread: SystemAccount<'info>,
 
     #[account(address = thread_program_ID)]
@@ -130,6 +137,8 @@ pub fn create_event<'info>(
         },
     )?;
 
+    // Higher than default fee to prioritize
+    let thread_fee = 10_000u64;
     // set the rate limit of the thread to crank 1 time per slot
     thread_update(
         CpiContext::new_with_signer(
@@ -142,7 +151,7 @@ pub fn create_event<'info>(
             &[&auth_seeds],
         ),
         ThreadSettings {
-            fee: None,
+            fee: Some(thread_fee),
             kickoff_instruction: None,
             rate_limit: Some(1),
             trigger: None,
@@ -201,11 +210,44 @@ pub fn create_event<'info>(
             &[&auth_seeds],
         ),
         ThreadSettings {
-            fee: None,
+            fee: Some(thread_fee),
             kickoff_instruction: None,
             rate_limit: Some(1),
             trigger: None,
         },
+    )?;
+
+    // Transfer the thread fees to the threads
+    transfer(
+        &ctx.accounts.payer.to_account_info(),
+        &ctx.accounts.lock_thread.to_account_info(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        &ctx.accounts.system_program.to_account_info(),
+        None,
+        None,
+        None,
+        thread_fee
+    )?;
+
+    transfer(
+        &ctx.accounts.payer.to_account_info(),
+        &ctx.accounts.settle_thread.to_account_info(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        &ctx.accounts.system_program.to_account_info(),
+        None,
+        None,
+        None,
+        thread_fee
     )?;
 
     Ok(())
