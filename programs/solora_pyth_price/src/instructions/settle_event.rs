@@ -5,7 +5,6 @@ use crate::state::{Event, Outcome};
 use crate::error::Error;
 
 #[derive(Accounts)]
-#[instruction(id: [u8; 32], outcome: Outcome)]
 pub struct SettleEvent<'info> {
     #[account(
         mut,
