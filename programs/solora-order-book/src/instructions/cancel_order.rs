@@ -33,7 +33,7 @@ pub struct CancelOrder<'info> {
 pub fn cancel_order<'info>(
     ctx: Context<'_, '_, '_, 'info, CancelOrder<'info>>,
     index: u32,
-    amount: u64
+    _amount: u64
 ) -> Result<()> {
     let is_native = is_native_mint(ctx.accounts.order.currency_mint);
 
