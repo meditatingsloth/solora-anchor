@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { SoloraPythPrice } from "../target/types/solora-pyth-price";
+import { SoloraPythPrice } from "../target/types/solora_pyth_price";
 import { Pyth } from "../target/types/pyth";
 import {LAMPORTS_PER_SOL, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY} from "@solana/web3.js";
 import { assert } from "chai";

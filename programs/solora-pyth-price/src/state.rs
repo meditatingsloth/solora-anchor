@@ -66,8 +66,8 @@ pub struct Order {
 }
 
 impl Order {
-    pub fn space(fill_len: usize) -> usize {
-        ORDER_SIZE + (fill_len * FILL_SIZE)
+    pub fn space() -> usize {
+        ORDER_SIZE
     }
 
     pub fn auth_seeds<'a>(&'a self) -> [&'a [u8]; 4] {
@@ -78,17 +78,6 @@ impl Order {
             self.bump.as_ref()
         ]
     }
-}
-
-pub const FILL_SIZE: usize = 4 + 32 + 1 + 8 + 1;
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
-pub struct Fill {
-    pub index: u32,
-    pub authority: Pubkey,
-    pub outcome: u8,
-    pub amount: u64,
-    pub is_settled: bool
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Debug)]

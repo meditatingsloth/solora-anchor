@@ -8,7 +8,7 @@ pub enum Error {
     #[msg("An invalid outcome was chosen")]
     InvalidOutcome,
     #[msg("There was a calculation overflow")]
-    CalculationOverflow,
+    OverflowError,
     #[msg("The fill amount is too large")]
     FillAmountTooLarge,
     #[msg("The expiry date has passed")]

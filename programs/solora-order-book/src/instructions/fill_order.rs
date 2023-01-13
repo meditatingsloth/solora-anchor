@@ -97,7 +97,7 @@ pub fn fill_order<'info>(
     let fill_index = ctx.accounts.order.fills.len() as u32;
     let order = &mut ctx.accounts.order;
     order.remaining_ask = order.remaining_ask.checked_sub(safe_amount)
-        .ok_or(Error::CalculationOverflow)?;
+        .ok_or(Error::OverflowError)?;
     order.fills.push(Fill {
         index: fill_index,
         authority: ctx.accounts.authority.key(),

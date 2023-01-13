@@ -36,6 +36,13 @@ pub fn set_lock_price<'info>(
         return err!(Error::EventNotLocked);
     }
 
+    // TODO: Delete lock thread
+
+    // TODO: Close event account if there are no bets
+    // TODO: Delete settle thread if there are no bets
+
+    // TODO: Set invalid outcome if only one side has bets
+
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
     let price = price_feed.get_price_no_older_than(timestamp, 30);
 

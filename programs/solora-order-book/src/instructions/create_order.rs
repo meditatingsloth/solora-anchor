@@ -110,7 +110,7 @@ pub fn create_order<'info>(
     }
 
     ctx.accounts.event.order_index = ctx.accounts.event.order_index.checked_add(1)
-        .ok_or(Error::CalculationOverflow)?;
+        .ok_or(Error::OverflowError)?;
 
     Ok(())
 }

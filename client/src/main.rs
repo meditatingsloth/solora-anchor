@@ -44,7 +44,7 @@ fn create_event(client: &Client) -> ClientResult<()> {
         spl_token::native_mint::ID.as_ref(),
         lock_time_bytes.as_ref(),
     ];
-    let event_pubkey = Pubkey::find_program_address(&auth_seeds, &solora-pyth-price::ID).0;
+    let event_pubkey = Pubkey::find_program_address(&auth_seeds, &solora_pyth_price::ID).0;
     let lock_thread_pubkey = Thread::pubkey(event_pubkey, "event_lock".into());
 
     println!(
@@ -59,7 +59,7 @@ fn create_event(client: &Client) -> ClientResult<()> {
     );
 
     let create_event_ix = Instruction {
-        program_id: solora-pyth-price::ID,
+        program_id: solora_pyth_price::ID,
         accounts: vec![
             AccountMeta::new(client.payer_pubkey(), true),
             AccountMeta::new_readonly(client.payer_pubkey(), false),
@@ -73,7 +73,7 @@ fn create_event(client: &Client) -> ClientResult<()> {
             AccountMeta::new_readonly(system_program::ID, false),
             AccountMeta::new_readonly(sysvar::rent::ID, false),
         ],
-        data: solora-pyth-price::instruction::CreateEvent{
+        data: solora_pyth_price::instruction::CreateEvent{
             lock_time,
             wait_period: 60,
             fee_bps: 300
