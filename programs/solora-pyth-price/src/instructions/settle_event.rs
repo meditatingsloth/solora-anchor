@@ -27,7 +27,7 @@ pub struct SettleEvent<'info> {
 }
 
 #[event]
-pub struct SettledEvent {
+pub struct EventSettled {
     pub event: Pubkey,
     pub up_amount: u128,
     pub down_amount: u128,
@@ -60,11 +60,11 @@ pub fn settle_event<'info>(
             msg!("Negative price: {}", price.price);
             event.outcome = Outcome::Invalid;
         } else {
-            event.settled_price = price.price as u64;
+            event.settle_price = price.price as u64;
 
-            event.outcome = if event.settled_price == event.lock_price {
+            event.outcome = if event.settle_price == event.lock_price {
                 Outcome::Invalid
-            } else if event.settled_price > event.lock_price {
+            } else if event.settle_price > event.lock_price {
                 Outcome::Up
             } else {
                 Outcome::Down
@@ -75,14 +75,14 @@ pub fn settle_event<'info>(
         event.outcome = Outcome::Invalid;
     }
 
-    emit!(SettledEvent {
+    emit!(EventSettled {
         event: event.key(),
         up_amount: event.up_amount,
         down_amount: event.down_amount,
         up_count: event.up_count,
         down_count: event.down_count,
         lock_price: event.lock_price,
-        settled_price: event.settled_price,
+        settled_price: event.settle_price,
         outcome: event.outcome
     });
     Ok(())

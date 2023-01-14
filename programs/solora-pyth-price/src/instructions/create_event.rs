@@ -69,7 +69,7 @@ pub struct CreateEvent<'info> {
 }
 
 #[event]
-pub struct NewEvent {
+pub struct EventCreated {
     pub event: Pubkey,
     pub authority: Pubkey,
     pub currency_mint: Pubkey,
@@ -259,7 +259,7 @@ pub fn create_event<'info>(
         thread_fee
     )?;
 
-    emit!(NewEvent {
+    emit!(EventCreated {
         event: ctx.accounts.event.key(),
         authority: ctx.accounts.authority.key(),
         currency_mint: ctx.accounts.currency_mint.key(),

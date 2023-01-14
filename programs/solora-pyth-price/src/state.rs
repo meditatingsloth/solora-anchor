@@ -28,7 +28,7 @@ pub struct Event {
     /// Price of the pyth feed at the time of lock
     pub lock_price: u64,
     /// Price of the pyth feed at the time of settlement
-    pub settled_price: u64,
+    pub settle_price: u64,
     /// Outcome of the event or 0 if not yet resolved
     pub outcome: Outcome,
     /// Store up and down bet amounts
