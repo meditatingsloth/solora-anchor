@@ -68,15 +68,6 @@ pub struct CreateEvent<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-#[event]
-pub struct EventCreated {
-    pub event: Pubkey,
-    pub authority: Pubkey,
-    pub currency_mint: Pubkey,
-    pub lock_time: i64,
-    pub wait_period: u32
-}
-
 pub fn create_event<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
     lock_time: i64,
@@ -262,9 +253,22 @@ pub fn create_event<'info>(
     emit!(EventCreated {
         event: ctx.accounts.event.key(),
         authority: ctx.accounts.authority.key(),
+        pyth_feed: ctx.accounts.pyth_feed.key(),
+        fee_bps,
+        lock_time,
+        wait_period,
         currency_mint: ctx.accounts.currency_mint.key(),
-        lock_time: lock_time,
-        wait_period: wait_period
     });
     Ok(())
+}
+
+#[event]
+pub struct EventCreated {
+    pub event: Pubkey,
+    pub authority: Pubkey,
+    pub pyth_feed: Pubkey,
+    pub fee_bps: u32,
+    pub lock_time: i64,
+    pub wait_period: u32,
+    pub currency_mint: Pubkey
 }

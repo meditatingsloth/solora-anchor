@@ -26,18 +26,6 @@ pub struct SettleEvent<'info> {
     pub thread: Account<'info, Thread>,
 }
 
-#[event]
-pub struct EventSettled {
-    pub event: Pubkey,
-    pub up_amount: u128,
-    pub down_amount: u128,
-    pub up_count: u32,
-    pub down_count: u32,
-    pub lock_price: u64,
-    pub settled_price: u64,
-    pub outcome: Outcome
-}
-
 pub fn settle_event<'info>(
     ctx: Context<'_, '_, '_, 'info, SettleEvent<'info>>,
 ) -> Result<()> {
@@ -77,13 +65,15 @@ pub fn settle_event<'info>(
 
     emit!(EventSettled {
         event: event.key(),
-        up_amount: event.up_amount,
-        down_amount: event.down_amount,
-        up_count: event.up_count,
-        down_count: event.down_count,
-        lock_price: event.lock_price,
-        settled_price: event.settle_price,
+        settle_price: event.settle_price,
         outcome: event.outcome
     });
     Ok(())
+}
+
+#[event]
+pub struct EventSettled {
+    pub event: Pubkey,
+    pub settle_price: u64,
+    pub outcome: Outcome
 }

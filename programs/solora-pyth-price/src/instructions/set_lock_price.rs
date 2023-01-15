@@ -60,5 +60,24 @@ pub fn set_lock_price<'info>(
         event.outcome = Outcome::Invalid;
     }
 
+    emit!(EventLocked {
+        event: event.key(),
+        lock_price: event.lock_price,
+        up_amount: event.up_amount,
+        down_amount: event.down_amount,
+        up_count: event.up_count,
+        down_count: event.down_count,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct EventLocked {
+    pub event: Pubkey,
+    pub lock_price: u64,
+    pub up_amount: u128,
+    pub down_amount: u128,
+    pub up_count: u32,
+    pub down_count: u32,
 }
