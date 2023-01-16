@@ -243,3 +243,15 @@ pub fn make_ata<'a>(
 
     Ok(())
 }
+
+pub fn get_price_with_decimal_change(pyth_price: i64, pyth_expo: i32, target_decimals: u8) -> Result<u64> {
+    let pyth_feed_decimals = (pyth_expo * -1) as u8;
+    let power_change = if pyth_feed_decimals > target_decimals {
+        pyth_feed_decimals - target_decimals
+    } else {
+        0
+    };
+    let power = 10_u128.pow(power_change as u32);
+    let price = (pyth_price as u128).checked_div(power).unwrap() as u64;
+    Ok(price)
+}

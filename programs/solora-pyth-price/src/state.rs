@@ -1,7 +1,10 @@
 use anchor_lang::prelude::*;
 use solana_program::pubkey::Pubkey;
 
-pub const EVENT_SIZE: usize = 8 + 1 + 1 + 32 + 32 + 32 + 32 + 32 + 4 + 8 + 4 + 32 + 8 + 8 + 2 + 16 + 16 + 8 + 8 + 256;
+pub const MAX_PRICE_DECIMALS: u8 = 4;
+
+pub const EVENT_SIZE: usize =
+    8 + 1 + 1 + 32 + 32 + 32 + 32 + 32 + 4 + 8 + 4 + 32 + 8 + 8 + 2 + 16 + 16 + 8 + 8 + 1 + 255;
 
 #[account]
 pub struct Event {
@@ -13,7 +16,7 @@ pub struct Event {
     pub lock_thread: Pubkey,
     /// Clockwork thread that will perform the settle event update
     pub settle_thread: Pubkey,
-    /// Bytes generated from sha256 of the event description
+    /// Pyth price feed account to fetch prices from
     pub pyth_feed: Pubkey,
     /// Account to receive fees
     pub fee_account: Pubkey,
@@ -36,7 +39,9 @@ pub struct Event {
     pub down_amount: u128,
     /// Store counts for UI
     pub up_count: u32,
-    pub down_count: u32
+    pub down_count: u32,
+    /// Number of decimals to consider for price changes
+    pub price_decimals: u8,
 }
 
 impl Event {

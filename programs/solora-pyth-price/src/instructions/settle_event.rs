@@ -3,6 +3,7 @@ use clockwork_sdk::state::{Thread};
 use pyth_sdk_solana::load_price_feed_from_account_info;
 use crate::state::{Event, Outcome};
 use crate::error::Error;
+use crate::util::get_price_with_decimal_change;
 
 #[derive(Accounts)]
 pub struct SettleEvent<'info> {
@@ -48,7 +49,11 @@ pub fn settle_event<'info>(
             msg!("Negative price: {}", price.price);
             event.outcome = Outcome::Invalid;
         } else {
-            event.settle_price = price.price as u64;
+            event.settle_price = get_price_with_decimal_change(
+                price.price,
+                price.expo,
+                event.price_decimals
+            )?;
 
             event.outcome = if event.settle_price == event.lock_price {
                 Outcome::Invalid

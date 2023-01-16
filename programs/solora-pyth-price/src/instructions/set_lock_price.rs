@@ -3,6 +3,7 @@ use crate::state::{Event, Outcome};
 use clockwork_sdk::state::{Thread};
 use anchor_lang::prelude::*;
 use pyth_sdk_solana::load_price_feed_from_account_info;
+use crate::util::get_price_with_decimal_change;
 
 #[derive(Accounts)]
 pub struct SetLockPrice<'info> {
@@ -53,7 +54,11 @@ pub fn set_lock_price<'info>(
             msg!("Negative price: {}", price.price);
             event.outcome = Outcome::Invalid;
         } else {
-            event.lock_price = price.price as u64;
+            event.lock_price = get_price_with_decimal_change(
+                price.price,
+                price.expo,
+                event.price_decimals
+            )?;
         }
     } else {
         msg!("No price found");

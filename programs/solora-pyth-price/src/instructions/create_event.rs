@@ -10,8 +10,9 @@ use clockwork_sdk::{
     state::{Trigger, Thread, ThreadSettings},
     ThreadProgram,
 };
+use pyth_sdk_solana::{load_price_feed_from_account_info, Price};
 use solana_program::instruction::Instruction;
-use crate::state::{Event, EVENT_SIZE, Outcome};
+use crate::state::{Event, EVENT_SIZE, MAX_PRICE_DECIMALS, Outcome};
 use crate::error::Error;
 use crate::util::transfer;
 
@@ -81,6 +82,11 @@ pub fn create_event<'info>(
     let authority = &ctx.accounts.authority;
     let system_program = &ctx.accounts.system_program;
 
+    let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
+    let price: Price = price_feed.get_price_unchecked();
+    msg!("price.expo: {}", price.expo);
+    let pyth_feed_decimals = (price.expo * -1) as u8;
+
     let event = &mut ctx.accounts.event;
     event.bump = [*ctx.bumps.get("event").unwrap()];
     event.authority = ctx.accounts.authority.key();
@@ -93,6 +99,12 @@ pub fn create_event<'info>(
     event.wait_period = wait_period;
     event.currency_mint = ctx.accounts.currency_mint.key();
     event.outcome = Outcome::Undrawn;
+    // Max 4 decimals to consider
+    event.price_decimals = if pyth_feed_decimals > MAX_PRICE_DECIMALS {
+        MAX_PRICE_DECIMALS
+    } else {
+        pyth_feed_decimals
+    };
 
     // build set_lock_price ix
     let set_lock_price_ix = Instruction {
@@ -252,6 +264,7 @@ pub fn create_event<'info>(
         event: event.key(),
         authority: authority.key(),
         pyth_feed: ctx.accounts.pyth_feed.key(),
+        price_decimals: event.price_decimals,
         fee_bps,
         lock_time,
         wait_period,
@@ -265,6 +278,7 @@ pub struct EventCreated {
     pub event: Pubkey,
     pub authority: Pubkey,
     pub pyth_feed: Pubkey,
+    pub price_decimals: u8,
     pub fee_bps: u32,
     pub lock_time: i64,
     pub wait_period: u32,
