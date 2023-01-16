@@ -18,12 +18,9 @@ use crate::util::transfer;
 #[derive(Accounts)]
 #[instruction(lock_time: i64)]
 pub struct CreateEvent<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
     /// CHECK: Allow any account to be the settle authority
-    #[account()]
-    pub authority: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
 
     #[account(
         init,
@@ -36,7 +33,7 @@ pub struct CreateEvent<'info> {
         ],
         bump,
         space = EVENT_SIZE,
-        payer = payer,
+        payer = authority,
     )]
     pub event: Box<Account<'info, Event>>,
 
@@ -81,7 +78,7 @@ pub fn create_event<'info>(
     let clockwork = &ctx.accounts.clockwork;
     let lock_thread = &ctx.accounts.lock_thread;
     let settle_thread = &ctx.accounts.settle_thread;
-    let payer = &ctx.accounts.payer;
+    let authority = &ctx.accounts.authority;
     let system_program = &ctx.accounts.system_program;
 
     let event = &mut ctx.accounts.event;
@@ -101,6 +98,7 @@ pub fn create_event<'info>(
     let set_lock_price_ix = Instruction {
         program_id: crate::ID,
         accounts: vec![
+            AccountMeta::new(authority.key(), false),
             AccountMeta::new(event.key(), false),
             AccountMeta::new_readonly(event.pyth_feed, false),
             AccountMeta::new(lock_thread.key(), true),
@@ -123,7 +121,7 @@ pub fn create_event<'info>(
             clockwork.to_account_info(),
             ThreadCreate {
                 authority: event.to_account_info(),
-                payer: payer.to_account_info(),
+                payer: authority.to_account_info(),
                 thread: lock_thread.to_account_info(),
                 system_program: system_program.to_account_info(),
             },
@@ -184,7 +182,7 @@ pub fn create_event<'info>(
             clockwork.to_account_info(),
             ThreadCreate {
                 authority: event.to_account_info(),
-                payer: payer.to_account_info(),
+                payer: authority.to_account_info(),
                 thread: settle_thread.to_account_info(),
                 system_program: system_program.to_account_info(),
             },
@@ -219,8 +217,8 @@ pub fn create_event<'info>(
 
     // Transfer the thread fees to the threads
     transfer(
-        &ctx.accounts.payer.to_account_info(),
-        &ctx.accounts.lock_thread.to_account_info(),
+        &authority.to_account_info(),
+        &lock_thread.to_account_info(),
         None,
         None,
         None,
@@ -235,8 +233,8 @@ pub fn create_event<'info>(
     )?;
 
     transfer(
-        &ctx.accounts.payer.to_account_info(),
-        &ctx.accounts.settle_thread.to_account_info(),
+        &authority.to_account_info(),
+        &settle_thread.to_account_info(),
         None,
         None,
         None,
@@ -251,8 +249,8 @@ pub fn create_event<'info>(
     )?;
 
     emit!(EventCreated {
-        event: ctx.accounts.event.key(),
-        authority: ctx.accounts.authority.key(),
+        event: event.key(),
+        authority: authority.key(),
         pyth_feed: ctx.accounts.pyth_feed.key(),
         fee_bps,
         lock_time,

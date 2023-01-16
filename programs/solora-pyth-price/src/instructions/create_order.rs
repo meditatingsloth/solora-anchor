@@ -24,7 +24,6 @@ pub struct CreateOrder<'info> {
     pub event: Box<Account<'info, Event>>,
 
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn create_order<'info>(

@@ -62,7 +62,6 @@ fn create_event(client: &Client) -> ClientResult<()> {
         program_id: solora_pyth_price::ID,
         accounts: vec![
             AccountMeta::new(client.payer_pubkey(), true),
-            AccountMeta::new_readonly(client.payer_pubkey(), false),
             AccountMeta::new(event_pubkey, false),
             AccountMeta::new_readonly(pyth_feed, false),
             AccountMeta::new_readonly(client.payer_pubkey(), false),
