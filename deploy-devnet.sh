@@ -6,6 +6,6 @@ DEPLOYER="DPLiu1NuyaFKUbf87Wes4tE85jXT18NS4MpptGbksAVR"
 
 solana config set --url https://api.devnet.solana.com
 anchor build
-cp ./target/idl/${PROGRAM_NAME}.json ../solora-ui/src/solora-ts/${PROGRAM_NAME}.json
+cp ./target/idl/${PROGRAM_NAME}.json ../solora-monorepo/packages/solora-ts/src/${PROGRAM_NAME}.json
 solana program deploy -k ./keys/${DEPLOYER}.json ./target/deploy/$PROGRAM_NAME.so
 anchor idl upgrade ${PROGRAM} -f ./target/idl/$PROGRAM_NAME.json --provider.cluster devnet --provider.wallet ./keys/${DEPLOYER}.json
