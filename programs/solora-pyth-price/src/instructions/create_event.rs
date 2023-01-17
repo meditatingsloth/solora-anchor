@@ -42,7 +42,7 @@ pub struct CreateEvent<'info> {
         seeds = [
             b"event".as_ref(),
             event_config.key().as_ref(),
-            &(event_config.next_event_start + event_config.interval_seconds as i64).to_le_bytes()
+            &event_config.next_event_start.to_le_bytes()
         ],
         bump,
         space = EVENT_SIZE,
@@ -113,6 +113,7 @@ pub fn create_event<'info>(
     event.settle_thread = ctx.accounts.settle_thread.key();
     event.fee_account = ctx.accounts.fee_account.key();
     event.fee_bps = fee_bps;
+    event.start_time = current_event_start;
     event.lock_time = lock_time;
     event.wait_period = wait_period;
     event.outcome = Outcome::Undrawn;
@@ -135,8 +136,8 @@ pub fn create_event<'info>(
         data: clockwork_sdk::utils::anchor_sighash("set_lock_price").into(),
     };
 
-    let lock_time_bytes = &event.lock_time.to_le_bytes();
-    let auth_seeds = event.auth_seeds(lock_time_bytes);
+    let start_time_bytes = &event.start_time.to_le_bytes();
+    let auth_seeds = event.auth_seeds(start_time_bytes);
 
     let datetime = NaiveDateTime::from_timestamp_opt(lock_time, 0)
         .ok_or(Error::InvalidLockTime)?;
@@ -197,8 +198,8 @@ pub fn create_event<'info>(
         data: clockwork_sdk::utils::anchor_sighash("settle_event").into(),
     };
 
-    let lock_time_bytes = &event.lock_time.to_le_bytes();
-    let auth_seeds = event.auth_seeds(lock_time_bytes);
+    let start_time_bytes = &event.start_time.to_le_bytes();
+    let auth_seeds = event.auth_seeds(start_time_bytes);
 
     let datetime = NaiveDateTime::from_timestamp_opt(lock_time + wait_period as i64, 0)
         .ok_or(Error::InvalidLockTime)?;
@@ -285,6 +286,8 @@ pub fn create_event<'info>(
         pyth_feed: event_config.pyth_feed,
         price_decimals: event.price_decimals,
         fee_bps,
+        fee_account: event.fee_account,
+        start_time: event.start_time,
         lock_time,
         wait_period,
         currency_mint: event_config.currency_mint,
@@ -300,6 +303,8 @@ pub struct EventCreated {
     pub pyth_feed: Pubkey,
     pub price_decimals: u8,
     pub fee_bps: u32,
+    pub fee_account: Pubkey,
+    pub start_time: i64,
     pub lock_time: i64,
     pub wait_period: u32,
     pub currency_mint: Pubkey

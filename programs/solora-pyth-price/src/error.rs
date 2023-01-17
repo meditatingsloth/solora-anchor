@@ -48,5 +48,9 @@ pub enum Error {
     #[msg("The event is still in the waiting period")]
     EventInWaitingPeriod,
     #[msg("Invalid interval")]
-    InvalidInterval
+    InvalidInterval,
+
+    /// 20
+    #[msg("The event has not started")]
+    EventNotStarted,
 }

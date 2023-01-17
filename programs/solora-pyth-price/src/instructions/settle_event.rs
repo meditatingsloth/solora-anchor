@@ -24,7 +24,7 @@ pub struct SettleEvent<'info> {
         seeds = [
             b"event".as_ref(),
             event_config.key().as_ref(),
-            &event.lock_time.to_le_bytes()
+            &event.start_time.to_le_bytes()
         ],
         bump = event.bump[0],
         has_one = settle_thread,

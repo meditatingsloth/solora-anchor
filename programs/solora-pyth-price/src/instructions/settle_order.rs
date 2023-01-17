@@ -24,7 +24,7 @@ pub struct SettleOrder<'info> {
         seeds = [
             b"event".as_ref(),
             event_config.key().as_ref(),
-            &event.lock_time.to_le_bytes()
+            &event.start_time.to_le_bytes()
         ],
         bump = event.bump[0],
         constraint = event.outcome != Outcome::Undrawn @ Error::EventNotSettled,
@@ -81,8 +81,8 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     };
 
     let is_native = is_native_mint(event_config.currency_mint);
-    let lock_time_bytes = &event.lock_time.to_le_bytes();
-    let auth_seeds = event.auth_seeds(lock_time_bytes);
+    let start_time_bytes = &event.start_time.to_le_bytes();
+    let auth_seeds = event.auth_seeds(start_time_bytes);
 
     let fee = if event.outcome == Outcome::Invalid {
         0

@@ -24,7 +24,7 @@ pub struct CreateOrder<'info> {
         seeds = [
             b"event".as_ref(),
             event_config.key().as_ref(),
-            &event.lock_time.to_le_bytes()
+            &event.start_time.to_le_bytes()
         ],
         bump = event.bump[0],
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
@@ -49,8 +49,14 @@ pub fn create_order<'info>(
     outcome: Outcome,
     amount: u64
 ) -> Result<()> {
+    let event = &mut ctx.accounts.event;
+
     let timestamp = Clock::get()?.unix_timestamp;
-    if timestamp >= ctx.accounts.event.lock_time {
+    if timestamp < event.start_time {
+        return err!(Error::EventNotStarted);
+    }
+
+    if timestamp >= event.lock_time {
         return err!(Error::EventLocked);
     }
 
@@ -60,7 +66,6 @@ pub fn create_order<'info>(
     }
 
     let order = &mut ctx.accounts.order;
-    let event = &mut ctx.accounts.event;
     order.bump = [*ctx.bumps.get("order").unwrap()];
     order.authority = ctx.accounts.authority.key();
     order.event = event.key();
