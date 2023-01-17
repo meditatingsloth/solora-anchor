@@ -97,7 +97,7 @@ pub fn create_event<'info>(
     }
 
     let wait_period = event_config.interval_seconds;
-    event_config.next_event_start = lock_time + wait_period as i64;
+    event_config.next_event_start = lock_time;
     msg!("event start: {}, lock: {}, settle: {}", current_event_start, lock_time, event_config.next_event_start);
 
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
