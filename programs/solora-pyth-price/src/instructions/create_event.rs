@@ -12,25 +12,37 @@ use clockwork_sdk::{
 };
 use pyth_sdk_solana::{load_price_feed_from_account_info, Price};
 use solana_program::instruction::Instruction;
-use crate::state::{Event, EVENT_SIZE, MAX_PRICE_DECIMALS, Outcome};
+use crate::state::{Event, EVENT_SIZE, EVENT_VERSION, EventConfig, MAX_PRICE_DECIMALS, Outcome};
 use crate::error::Error;
 use crate::util::transfer;
 
 #[derive(Accounts)]
-#[instruction(lock_time: i64)]
 pub struct CreateEvent<'info> {
     /// CHECK: Allow any account to be the settle authority
     #[account(mut)]
     pub authority: Signer<'info>,
 
     #[account(
+        mut,
+        seeds = [
+            b"event_config".as_ref(),
+            event_config.authority.as_ref(),
+            event_config.pyth_feed.as_ref(),
+            event_config.currency_mint.as_ref()
+        ],
+        bump = event_config.bump[0],
+        has_one = authority,
+        has_one = pyth_feed,
+        has_one = currency_mint
+    )]
+    pub event_config: Box<Account<'info, EventConfig>>,
+
+    #[account(
         init,
         seeds = [
             b"event".as_ref(),
-            pyth_feed.key().as_ref(),
-            fee_account.key().as_ref(),
-            currency_mint.key().as_ref(),
-            &lock_time.to_le_bytes()
+            event_config.key().as_ref(),
+            &(event_config.next_event_start + event_config.interval_seconds as i64).to_le_bytes()
         ],
         bump,
         space = EVENT_SIZE,
@@ -38,7 +50,7 @@ pub struct CreateEvent<'info> {
     )]
     pub event: Box<Account<'info, Event>>,
 
-    /// CHECK: TODO: Does pyth do their own validation when reading price?
+    /// CHECK: Should be a valid pyth feed
     #[account()]
     pub pyth_feed: UncheckedAccount<'info>,
 
@@ -68,19 +80,25 @@ pub struct CreateEvent<'info> {
 
 pub fn create_event<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
-    lock_time: i64,
-    wait_period: u32,
     fee_bps: u32,
 ) -> Result<()> {
-    if lock_time <= Clock::get()?.unix_timestamp {
-        return err!(Error::InvalidLockTime);
-    }
-
-    let clockwork = &ctx.accounts.clockwork;
+    let timestamp = Clock::get()?.unix_timestamp;
+    let authority = &ctx.accounts.authority;
     let lock_thread = &ctx.accounts.lock_thread;
     let settle_thread = &ctx.accounts.settle_thread;
-    let authority = &ctx.accounts.authority;
     let system_program = &ctx.accounts.system_program;
+    let clockwork = &ctx.accounts.clockwork;
+
+    let event_config = &mut ctx.accounts.event_config;
+    let current_event_start = event_config.next_event_start;
+    let lock_time = current_event_start + event_config.interval_seconds as i64;
+    if lock_time < timestamp {
+        return err!(Error::InvalidLockTime)
+    }
+
+    let wait_period = event_config.interval_seconds;
+    event_config.next_event_start = lock_time + wait_period as i64;
+    msg!("event start: {}, lock: {}, settle: {}", current_event_start, lock_time, event_config.next_event_start);
 
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
     let price: Price = price_feed.get_price_unchecked();
@@ -89,15 +107,14 @@ pub fn create_event<'info>(
 
     let event = &mut ctx.accounts.event;
     event.bump = [*ctx.bumps.get("event").unwrap()];
-    event.authority = ctx.accounts.authority.key();
+    event.version = EVENT_VERSION;
+    event.event_config = event_config.key();
     event.lock_thread = ctx.accounts.lock_thread.key();
     event.settle_thread = ctx.accounts.settle_thread.key();
-    event.pyth_feed = ctx.accounts.pyth_feed.key();
     event.fee_account = ctx.accounts.fee_account.key();
     event.fee_bps = fee_bps;
     event.lock_time = lock_time;
     event.wait_period = wait_period;
-    event.currency_mint = ctx.accounts.currency_mint.key();
     event.outcome = Outcome::Undrawn;
     // Max 4 decimals to consider
     event.price_decimals = if pyth_feed_decimals > MAX_PRICE_DECIMALS {
@@ -110,9 +127,9 @@ pub fn create_event<'info>(
     let set_lock_price_ix = Instruction {
         program_id: crate::ID,
         accounts: vec![
-            AccountMeta::new(authority.key(), false),
+            AccountMeta::new_readonly(event_config.key(), false),
             AccountMeta::new(event.key(), false),
-            AccountMeta::new_readonly(event.pyth_feed, false),
+            AccountMeta::new_readonly(event_config.pyth_feed, false),
             AccountMeta::new(lock_thread.key(), true),
         ],
         data: clockwork_sdk::utils::anchor_sighash("set_lock_price").into(),
@@ -172,8 +189,9 @@ pub fn create_event<'info>(
     let settle_event_ix = Instruction {
         program_id: crate::ID,
         accounts: vec![
+            AccountMeta::new(event_config.key(), false),
             AccountMeta::new(event.key(), false),
-            AccountMeta::new_readonly(event.pyth_feed, false),
+            AccountMeta::new_readonly(event_config.pyth_feed, false),
             AccountMeta::new(settle_thread.key(), true),
         ],
         data: clockwork_sdk::utils::anchor_sighash("settle_event").into(),
@@ -261,20 +279,22 @@ pub fn create_event<'info>(
     )?;
 
     emit!(EventCreated {
+        event_config: event_config.key(),
         event: event.key(),
-        authority: authority.key(),
-        pyth_feed: ctx.accounts.pyth_feed.key(),
+        authority: event_config.authority,
+        pyth_feed: event_config.pyth_feed,
         price_decimals: event.price_decimals,
         fee_bps,
         lock_time,
         wait_period,
-        currency_mint: ctx.accounts.currency_mint.key(),
+        currency_mint: event_config.currency_mint,
     });
     Ok(())
 }
 
 #[event]
 pub struct EventCreated {
+    pub event_config: Pubkey,
     pub event: Pubkey,
     pub authority: Pubkey,
     pub pyth_feed: Pubkey,

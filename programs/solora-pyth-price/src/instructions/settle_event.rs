@@ -1,30 +1,47 @@
 use anchor_lang::prelude::*;
 use clockwork_sdk::state::{Thread};
 use pyth_sdk_solana::load_price_feed_from_account_info;
-use crate::state::{Event, Outcome};
+use crate::state::{Event, EventConfig, Outcome};
 use crate::error::Error;
 use crate::util::get_price_with_decimal_change;
 
 #[derive(Accounts)]
 pub struct SettleEvent<'info> {
     #[account(
+        seeds = [
+            b"event_config".as_ref(),
+            event_config.authority.as_ref(),
+            event_config.pyth_feed.as_ref(),
+            event_config.currency_mint.as_ref()
+        ],
+        bump = event_config.bump[0],
+        has_one = pyth_feed
+    )]
+    pub event_config: Box<Account<'info, EventConfig>>,
+
+    #[account(
         mut,
-        has_one = pyth_feed,
+        seeds = [
+            b"event".as_ref(),
+            event_config.key().as_ref(),
+            &event.lock_time.to_le_bytes()
+        ],
+        bump = event.bump[0],
+        has_one = settle_thread,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
         constraint = event.lock_price > 0 @ Error::LockPriceNotSet,
     )]
     pub event: Box<Account<'info, Event>>,
 
-    /// CHECK: Safe due to event constraint
+    /// CHECK: Safe due to event_config constraint
     pub pyth_feed: UncheckedAccount<'info>,
 
     #[account(
         signer,
-        address = event.settle_thread,
-        constraint = thread.id.eq("event_settle"),
-        constraint = thread.authority == event.key()
+        constraint = settle_thread.id.eq("event_settle"),
+        constraint = settle_thread.authority == event.key()
     )]
-    pub thread: Account<'info, Thread>,
+    pub settle_thread: Account<'info, Thread>,
 }
 
 pub fn settle_event<'info>(
@@ -69,6 +86,7 @@ pub fn settle_event<'info>(
     }
 
     emit!(EventSettled {
+        event_config: event.event_config,
         event: event.key(),
         settle_price: event.settle_price,
         outcome: event.outcome
@@ -78,6 +96,7 @@ pub fn settle_event<'info>(
 
 #[event]
 pub struct EventSettled {
+    pub event_config: Pubkey,
     pub event: Pubkey,
     pub settle_price: u64,
     pub outcome: Outcome

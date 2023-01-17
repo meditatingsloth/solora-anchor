@@ -1,9 +1,13 @@
+mod create_event_config;
+mod update_event_config;
 mod create_event;
 mod create_order;
 mod set_lock_price;
 mod settle_order;
 mod settle_event;
 
+pub use create_event_config::*;
+pub use update_event_config::*;
 pub use create_event::*;
 pub use create_order::*;
 pub use set_lock_price::*;

@@ -2,9 +2,9 @@ use anchor_lang::prelude::*;
 use instructions::*;
 use state::Outcome;
 
-mod state;
-mod error;
-mod instructions;
+pub mod state;
+pub mod error;
+pub mod instructions;
 mod util;
 
 declare_id!("SPPBWBa5ooYYTVZDT7ESkU8ui7uiUjok6YBNeDogbx5");
@@ -13,13 +13,27 @@ declare_id!("SPPBWBa5ooYYTVZDT7ESkU8ui7uiUjok6YBNeDogbx5");
 pub mod solora_pyth_price {
     use super::*;
 
+    pub fn create_event_config<'info>(
+        ctx: Context<'_, '_, '_, 'info, CreateEventConfig<'info>>,
+        interval_seconds: u32,
+        next_event_start: i64
+    ) -> Result<()> {
+        instructions::create_event_config(ctx, interval_seconds, next_event_start)
+    }
+
+    pub fn update_event_config<'info>(
+        ctx: Context<'_, '_, '_, 'info, UpdateEventConfig<'info>>,
+        interval_seconds: u32,
+        next_event_start: i64
+    ) -> Result<()> {
+        instructions::update_event_config(ctx, interval_seconds, next_event_start)
+    }
+
     pub fn create_event<'info>(
         ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
-        lock_time: i64,
-        wait_period: u32,
         fee_bps: u32,
     ) -> Result<()> {
-        instructions::create_event(ctx, lock_time, wait_period, fee_bps)
+        instructions::create_event(ctx, fee_bps)
     }
 
     pub fn set_lock_price<'info>(

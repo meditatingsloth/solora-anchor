@@ -18,35 +18,96 @@ use {
     },
     std::str::FromStr,
 };
+use solora_pyth_price::state::EventConfig;
 
 fn main() -> ClientResult<()> {
     // Creating a Client with your default paper keypair as payer
     let client = default_client();
     client.airdrop(&client.payer_pubkey(), 1 * LAMPORTS_PER_SOL)?;
 
-    // create thread that listens for account changes for a pyth pricing feed
-    create_event(&client)?;
+    let (event_config, next_event_pubkey) = create_event_config(&client)?;
+
+    create_event(&client, event_config, next_event_pubkey)?;
 
     Ok(())
 }
 
-fn create_event(client: &Client) -> ClientResult<()> {
+fn create_event_config(client: &Client) -> ClientResult<(EventConfig, Pubkey)> {
+    let payer = client.payer_pubkey();
     // SOL/USD price feed: https://pyth.network/price-feeds/crypto-sol-usd?cluster=mainnet-beta
     // copied account to test validator using https://book.anchor-lang.com/anchor_references/anchor-toml_reference.html#testvalidatorclone
     let pyth_feed = Pubkey::from_str("J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix").unwrap();
-    let lock_time = Utc::now().timestamp() + 60; // 60 seconds from now
-    let lock_time_bytes = lock_time.to_le_bytes();
-    let payer = client.payer_pubkey();
+
+    let auth_seeds = [
+        b"event_config".as_ref(),
+        payer.as_ref(),
+        pyth_feed.as_ref(),
+        spl_token::native_mint::ID.as_ref(),
+    ];
+    let event_config_pubkey = Pubkey::find_program_address(&auth_seeds, &solora_pyth_price::ID).0;
+    let event_config_account = client.get_account(&event_config_pubkey)?;
+    if !event_config_account.data.is_empty() {
+        // Already exists
+        let event_config = solora_pyth_price::state::EventConfig::try_from(&event_config_account.data)?;
+        let auth_seeds = [
+            b"event".as_ref(),
+            event_config_pubkey.as_ref(),
+            event_config.next_event_start.as_ref(),
+        ];
+        let event_pubkey = Pubkey::find_program_address(&auth_seeds, &solora_pyth_price::ID).0;
+        return Ok((event_config, event_pubkey));
+    }
+
+    let create_event_thread = Thread::pubkey(event_config_pubkey, "event_create".into());
+
+    println!(
+        "create event thread: 🔗 {}",
+        explorer().thread_url(create_event_thread, thread_program_ID)
+    );
+
+    let next_event_start = Utc::now().timestamp() + 60;
+    let create_event_config_ix = Instruction {
+        program_id: solora_pyth_price::ID,
+        accounts: vec![
+            AccountMeta::new(client.payer_pubkey(), true),
+            AccountMeta::new(event_config_pubkey, false),
+            AccountMeta::new_readonly(pyth_feed, false),
+            AccountMeta::new_readonly(client.payer_pubkey(), false),
+            AccountMeta::new_readonly(spl_token::native_mint::ID, false),
+            AccountMeta::new(create_event_thread, false),
+            AccountMeta::new_readonly(system_program::ID, false),
+            AccountMeta::new_readonly(sysvar::rent::ID, false),
+        ],
+        data: solora_pyth_price::instruction::CreateEventConfig {
+            interval_seconds: 60,
+            next_event_start
+        }.data(),
+    };
+
+    sign_send_and_confirm_tx(
+        &client,
+        [create_event_config_ix].to_vec(),
+        None,
+        "create_event_config".into(),
+    )?;
+
+    let event_config_account = client.get_account(&event_config_pubkey)?;
+    let mut data: &[u8] = &event_config_account.data;
+    let event_config = ???
     let auth_seeds = [
         b"event".as_ref(),
-        pyth_feed.as_ref(),
-        payer.as_ref(),
-        spl_token::native_mint::ID.as_ref(),
-        lock_time_bytes.as_ref(),
+        event_config_pubkey.as_ref(),
+        next_event_start.as_ref(),
     ];
     let event_pubkey = Pubkey::find_program_address(&auth_seeds, &solora_pyth_price::ID).0;
-    let lock_thread_pubkey = Thread::pubkey(event_pubkey, "event_lock".into());
 
+    Ok((event_config, event_pubkey))
+}
+
+fn create_event(client: &Client, event_config: EventConfig, event_pubkey: Pubkey) -> ClientResult<()> {
+    let payer = client.payer_pubkey();
+
+    let lock_thread_pubkey = Thread::pubkey(event_pubkey, "event_lock".into());
     println!(
         "lock thread: 🔗 {}",
         explorer().thread_url(lock_thread_pubkey, thread_program_ID)
@@ -62,10 +123,11 @@ fn create_event(client: &Client) -> ClientResult<()> {
         program_id: solora_pyth_price::ID,
         accounts: vec![
             AccountMeta::new(client.payer_pubkey(), true),
+            AccountMeta::new(event_config.key(), false),
             AccountMeta::new(event_pubkey, false),
-            AccountMeta::new_readonly(pyth_feed, false),
+            AccountMeta::new_readonly(event_config.pyth_feed, false),
             AccountMeta::new_readonly(client.payer_pubkey(), false),
-            AccountMeta::new_readonly(spl_token::native_mint::ID, false),
+            AccountMeta::new_readonly(event_config.currency_mint, false),
             AccountMeta::new(lock_thread_pubkey, false),
             AccountMeta::new(settle_thread_pubkey, false),
             AccountMeta::new_readonly(thread_program_ID, false),
@@ -73,8 +135,6 @@ fn create_event(client: &Client) -> ClientResult<()> {
             AccountMeta::new_readonly(sysvar::rent::ID, false),
         ],
         data: solora_pyth_price::instruction::CreateEvent{
-            lock_time,
-            wait_period: 60,
             fee_bps: 300
         }.data(),
     };

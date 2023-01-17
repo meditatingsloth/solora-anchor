@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{Event, Order, ORDER_SIZE, Outcome};
+use crate::state::{Event, EventConfig, Order, ORDER_SIZE, Outcome};
 use crate::error::Error;
 use crate::util::{transfer, transfer_sol, is_native_mint};
 
@@ -9,6 +9,30 @@ pub struct CreateOrder<'info> {
     pub authority: Signer<'info>,
 
     #[account(
+        seeds = [
+            b"event_config".as_ref(),
+            event_config.authority.as_ref(),
+            event_config.pyth_feed.as_ref(),
+            event_config.currency_mint.as_ref()
+        ],
+        bump = event_config.bump[0],
+    )]
+    pub event_config: Box<Account<'info, EventConfig>>,
+
+    #[account(
+        mut,
+        seeds = [
+            b"event".as_ref(),
+            event_config.key().as_ref(),
+            &event.lock_time.to_le_bytes()
+        ],
+        bump = event.bump[0],
+        constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
+        has_one = event_config
+    )]
+    pub event: Box<Account<'info, Event>>,
+
+    #[account(
         init,
         seeds = [b"order".as_ref(), event.key().as_ref(), authority.key().as_ref()],
         bump,
@@ -16,12 +40,6 @@ pub struct CreateOrder<'info> {
         payer = authority,
     )]
     pub order: Box<Account<'info, Order>>,
-
-    #[account(
-        mut,
-        constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
-    )]
-    pub event: Box<Account<'info, Event>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -60,7 +78,7 @@ pub fn create_order<'info>(
 
     // If there are remaining_accounts populated we're using an alt currency mint
     if ctx.remaining_accounts.len() == 0 {
-        if !is_native_mint(ctx.accounts.event.currency_mint) {
+        if !is_native_mint(ctx.accounts.event_config.currency_mint) {
             return err!(Error::InvalidMint);
         }
         transfer_sol(
@@ -74,21 +92,21 @@ pub fn create_order<'info>(
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
         let currency_mint = next_account_info(remaining_accounts)?;
-        let order_currency_account = next_account_info(remaining_accounts)?;
+        let event_currency_account = next_account_info(remaining_accounts)?;
         let user_currency_account = next_account_info(remaining_accounts)?;
         let token_program = next_account_info(remaining_accounts)?;
         let ata_program = next_account_info(remaining_accounts)?;
         let rent = next_account_info(remaining_accounts)?;
 
-        if ctx.accounts.event.currency_mint != currency_mint.key() {
+        if ctx.accounts.event_config.currency_mint != currency_mint.key() {
             return err!(Error::InvalidMint);
         }
 
         transfer(
             &ctx.accounts.authority.to_account_info(),
-            &order.to_account_info(),
+            &event.to_account_info(),
             user_currency_account.into(),
-            order_currency_account.into(),
+            event_currency_account.into(),
             currency_mint.into(),
             Option::from(&ctx.accounts.authority.to_account_info()),
             ata_program.into(),
