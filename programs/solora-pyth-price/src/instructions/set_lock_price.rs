@@ -87,6 +87,7 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
         down_amount: event.down_amount,
         up_count: event.up_count,
         down_count: event.down_count,
+        outcome: event.outcome
     });
 
     Ok(())
@@ -101,4 +102,5 @@ pub struct EventLocked {
     pub down_amount: u128,
     pub up_count: u32,
     pub down_count: u32,
+    pub outcome: Outcome
 }
