@@ -73,11 +73,13 @@ pub fn create_order<'info>(
     order.amount = amount;
 
     if outcome == Outcome::Up {
-        event.up_amount += event.up_amount.checked_add(amount as u128).ok_or(Error::OverflowError)?;
+        event.up_amount = event.up_amount.checked_add(amount as u128)
+            .ok_or(Error::OverflowError)?;
         event.up_count += 1;
     }
     else {
-        event.down_amount += event.down_amount.checked_add(amount as u128).ok_or(Error::OverflowError)?;
+        event.down_amount = event.down_amount.checked_add(amount as u128)
+            .ok_or(Error::OverflowError)?;
         event.down_count += 1;
     }
 

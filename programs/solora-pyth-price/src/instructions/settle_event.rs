@@ -54,7 +54,7 @@ pub fn settle_event<'info>(
         return err!(Error::EventInWaitingPeriod);
     }
 
-    // TODO: Delete settle thread
+    // TODO: Delete settle thread when possible to delete from thread call
 
     let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
     let price = price_feed.get_price_no_older_than(timestamp, 30);
