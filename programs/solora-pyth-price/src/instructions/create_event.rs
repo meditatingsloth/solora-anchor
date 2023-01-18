@@ -128,6 +128,7 @@ pub fn create_event<'info>(
     let set_lock_price_ix = Instruction {
         program_id: crate::ID,
         accounts: vec![
+            AccountMeta::new_readonly(event_config.authority, false),
             AccountMeta::new_readonly(event_config.key(), false),
             AccountMeta::new(event.key(), false),
             AccountMeta::new_readonly(event_config.pyth_feed, false),

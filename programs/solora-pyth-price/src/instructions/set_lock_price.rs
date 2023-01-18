@@ -7,6 +7,10 @@ use pyth_sdk_solana::load_price_feed_from_account_info;
 
 #[derive(Accounts)]
 pub struct SetLockPrice<'info> {
+    /// CHECK: Safe due to event constraint
+    #[account(mut)]
+    pub authority: UncheckedAccount<'info>,
+
     #[account(
         seeds = [
             b"event_config".as_ref(),
@@ -15,7 +19,8 @@ pub struct SetLockPrice<'info> {
             event_config.currency_mint.as_ref()
         ],
         bump = event_config.bump[0],
-        has_one = pyth_feed
+        has_one = pyth_feed,
+        has_one = authority,
     )]
     pub event_config: Box<Account<'info, EventConfig>>,
 
@@ -53,12 +58,7 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
         return err!(Error::EventNotLocked);
     }
 
-    // TODO: Delete lock thread
-
-    // TODO: Close event account if there are no bets
-    // TODO: Delete settle thread if there are no bets
-
-    // TODO: Set invalid outcome if only one side has bets
+    // TODO: Delete lock thread when possible to delete from thread call
 
     let price_feed =
         load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
@@ -71,12 +71,24 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
             msg!("Negative price: {}", price.price);
             event.outcome = Outcome::Invalid;
         } else {
-            event.lock_price =
-                get_price_with_decimal_change(price.price, price.expo, event.price_decimals)?;
+            event.lock_price = get_price_with_decimal_change(
+                price.price,
+                price.expo,
+                event.price_decimals
+            )?;
+
+            // Set invalid outcome if only one side has bets
+            if event.up_amount == 0 || event.down_amount == 0 {
+                event.outcome = Outcome::Invalid;
+            }
         }
     } else {
         msg!("No price found");
         event.outcome = Outcome::Invalid;
+    }
+
+    if event.up_amount == 0 && event.down_amount == 0 {
+        event.close(ctx.accounts.authority.to_account_info())?;
     }
 
     emit!(EventLocked {
