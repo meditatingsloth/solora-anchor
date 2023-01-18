@@ -7,10 +7,6 @@ use pyth_sdk_solana::load_price_feed_from_account_info;
 
 #[derive(Accounts)]
 pub struct SetLockPrice<'info> {
-    /// CHECK: Safe due to event constraint
-    #[account(mut)]
-    pub authority: UncheckedAccount<'info>,
-
     #[account(
         seeds = [
             b"event_config".as_ref(),
@@ -20,7 +16,6 @@ pub struct SetLockPrice<'info> {
         ],
         bump = event_config.bump[0],
         has_one = pyth_feed,
-        has_one = authority,
     )]
     pub event_config: Box<Account<'info, EventConfig>>,
 
@@ -85,10 +80,6 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
     } else {
         msg!("No price found");
         event.outcome = Outcome::Invalid;
-    }
-
-    if event.up_amount == 0 && event.down_amount == 0 {
-        event.close(ctx.accounts.authority.to_account_info())?;
     }
 
     emit!(EventLocked {

@@ -61,4 +61,10 @@ pub mod solora_pyth_price {
     ) -> Result<()> {
         instructions::settle_event(ctx)
     }
+
+    pub fn close_accounts<'info>(
+        ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info>>,
+    ) -> Result<()> {
+        instructions::close_accounts(ctx)
+    }
 }

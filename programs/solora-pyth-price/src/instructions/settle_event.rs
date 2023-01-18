@@ -15,7 +15,7 @@ pub struct SettleEvent<'info> {
             event_config.currency_mint.as_ref()
         ],
         bump = event_config.bump[0],
-        has_one = pyth_feed
+        has_one = pyth_feed,
     )]
     pub event_config: Box<Account<'info, EventConfig>>,
 
