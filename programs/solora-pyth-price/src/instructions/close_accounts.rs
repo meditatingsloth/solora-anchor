@@ -7,7 +7,6 @@ use clockwork_sdk::{
         thread_delete,
         ThreadDelete,
     },
-    state::{Thread},
     ThreadProgram,
 };
 
@@ -44,19 +43,13 @@ pub struct CloseAccounts<'info> {
     )]
     pub event: Box<Account<'info, Event>>,
 
-    #[account(
-        mut,
-        constraint = lock_thread.id.eq("event_lock"),
-        constraint = lock_thread.authority == event.key()
-    )]
-    pub lock_thread: Account<'info, Thread>,
+    /// CHECK: Safe due to event constraint
+    #[account(mut)]
+    pub lock_thread: UncheckedAccount<'info>,
 
-    #[account(
-        mut,
-        constraint = settle_thread.id.eq("event_settle"),
-        constraint = settle_thread.authority == event.key()
-    )]
-    pub settle_thread: Account<'info, Thread>,
+    /// CHECK: Safe due to event constraint
+    #[account(mut)]
+    pub settle_thread: UncheckedAccount<'info>,
 
     #[account(address = thread_program_ID)]
     pub clockwork: Program<'info, ThreadProgram>,
@@ -73,25 +66,29 @@ pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info
     let start_time_bytes = &event.start_time.to_le_bytes();
     let auth_seeds = event.auth_seeds(start_time_bytes);
 
-    thread_delete(CpiContext::new_with_signer(
-        ctx.accounts.clockwork.to_account_info(),
-        ThreadDelete {
-            authority: event.to_account_info(),
-            close_to: ctx.accounts.authority.to_account_info(),
-            thread: ctx.accounts.lock_thread.to_account_info(),
-        },
-        &[&auth_seeds]
-    ))?;
+    if !ctx.accounts.lock_thread.data_is_empty() {
+        thread_delete(CpiContext::new_with_signer(
+            ctx.accounts.clockwork.to_account_info(),
+            ThreadDelete {
+                authority: event.to_account_info(),
+                close_to: ctx.accounts.authority.to_account_info(),
+                thread: ctx.accounts.lock_thread.to_account_info(),
+            },
+            &[&auth_seeds]
+        ))?;
+    }
 
-    thread_delete(CpiContext::new_with_signer(
-        ctx.accounts.clockwork.to_account_info(),
-        ThreadDelete {
-            authority: event.to_account_info(),
-            close_to: ctx.accounts.authority.to_account_info(),
-            thread: ctx.accounts.settle_thread.to_account_info(),
-        },
-        &[&auth_seeds]
-    ))?;
+    if !ctx.accounts.settle_thread.data_is_empty() {
+        thread_delete(CpiContext::new_with_signer(
+            ctx.accounts.clockwork.to_account_info(),
+            ThreadDelete {
+                authority: event.to_account_info(),
+                close_to: ctx.accounts.authority.to_account_info(),
+                thread: ctx.accounts.settle_thread.to_account_info(),
+            },
+            &[&auth_seeds]
+        ))?;
+    }
 
     // Close the event if there were no bets
     if event.up_amount == 0 &&
