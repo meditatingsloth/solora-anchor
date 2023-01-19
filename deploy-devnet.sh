@@ -1,7 +1,7 @@
 #!/usr/local/bin/bash
 
 PROGRAM_NAME="solora_pyth_price"
-PROGRAM="SPPBWBa5ooYYTVZDT7ESkU8ui7uiUjok6YBNeDogbx5"
+PROGRAM="SPPABS7FYzggcZZq3UT5oQPdgqPixZx6LAdKkKm1dTx"
 DEPLOYER="DPLiu1NuyaFKUbf87Wes4tE85jXT18NS4MpptGbksAVR"
 
 solana config set --url https://api.devnet.solana.com

@@ -4,7 +4,7 @@ skip-lint = false
 
 [programs.localnet]
 solora-order-book = "8b5j5Ua8jBDqnCZNB22NJAedd5TBs5NBAjqF65q8BpuS"
-solora-pyth-price = "SPPBWBa5ooYYTVZDT7ESkU8ui7uiUjok6YBNeDogbx5"
+solora-pyth-price = "SPPABS7FYzggcZZq3UT5oQPdgqPixZx6LAdKkKm1dTx"
 pyth = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
 
 [provider]

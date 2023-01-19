@@ -7,7 +7,7 @@ pub mod error;
 pub mod instructions;
 mod util;
 
-declare_id!("SPPBWBa5ooYYTVZDT7ESkU8ui7uiUjok6YBNeDogbx5");
+declare_id!("SPPABS7FYzggcZZq3UT5oQPdgqPixZx6LAdKkKm1dTx");
 
 #[program]
 pub mod solora_pyth_price {

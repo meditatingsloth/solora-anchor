@@ -71,11 +71,6 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
                 price.expo,
                 event.price_decimals
             )?;
-
-            // Set invalid outcome if only one side has bets
-            if event.up_amount == 0 || event.down_amount == 0 {
-                event.outcome = Outcome::Invalid;
-            }
         }
     } else {
         msg!("No price found");
