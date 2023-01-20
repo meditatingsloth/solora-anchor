@@ -13,4 +13,5 @@ pub enum Outcome {
 	Invalid,
 	Up,
 	Down,
+	Same
 }

@@ -73,7 +73,7 @@ pub fn settle_event<'info>(
             )?;
 
             event.outcome = if event.settle_price == event.lock_price {
-                Outcome::Invalid
+                Outcome::Same
             } else if event.settle_price > event.lock_price {
                 Outcome::Up
             } else {

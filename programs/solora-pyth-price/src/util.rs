@@ -7,6 +7,7 @@ use solana_program::program::{invoke, invoke_signed};
 use solana_program::program_pack::{IsInitialized, Pack};
 use spl_associated_token_account::instruction::create_associated_token_account;
 use spl_token::state::Account as SplAccount;
+use crate::error::Error;
 
 #[error_code]
 pub enum UtilError {
@@ -44,6 +45,25 @@ pub fn transfer_sol<'a>(
         None,
         amount
     )?)
+}
+
+pub fn transfer_sol_pda(
+    // The program owned account to transfer from.
+    pda: &mut AccountInfo,
+    dst: &mut AccountInfo,
+    amount: u64,
+) -> Result<()> {
+    **pda.try_borrow_mut_lamports()? = pda
+        .lamports()
+        .checked_sub(amount)
+        .ok_or(Error::OverflowError)?;
+
+    **dst.try_borrow_mut_lamports()? = dst
+        .lamports()
+        .checked_add(amount)
+        .ok_or(Error::OverflowError)?;
+
+    Ok(())
 }
 
 /// Transfers SOL or SPL tokens between two accounts. The native mint can be used for the

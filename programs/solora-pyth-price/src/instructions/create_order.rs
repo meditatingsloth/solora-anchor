@@ -60,8 +60,8 @@ pub fn create_order<'info>(
         return err!(Error::EventLocked);
     }
 
-    if outcome == Outcome::Undrawn ||
-        outcome == Outcome::Invalid {
+    if outcome != Outcome::Up &&
+        outcome != Outcome::Down {
         return err!(Error::InvalidOutcome);
     }
 
@@ -88,14 +88,14 @@ pub fn create_order<'info>(
         if !is_native_mint(ctx.accounts.event_config.currency_mint) {
             return err!(Error::InvalidMint);
         }
+
         transfer_sol(
             &ctx.accounts.authority.to_account_info(),
-            &order.to_account_info(),
+            &event.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             None,
             amount,
         )?;
-
     } else {
         let remaining_accounts = &mut ctx.remaining_accounts.iter();
         let currency_mint = next_account_info(remaining_accounts)?;

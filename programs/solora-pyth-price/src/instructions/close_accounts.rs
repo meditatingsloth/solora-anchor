@@ -90,9 +90,8 @@ pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info
         ))?;
     }
 
-    // Close the event if there were no bets
-    if event.up_amount == 0 &&
-        event.down_amount == 0 {
+    // Close the event if all orders have been settled
+    if event.up_count + event.down_count == event.orders_settled {
         event.close(ctx.accounts.authority.to_account_info())?;
     }
 
