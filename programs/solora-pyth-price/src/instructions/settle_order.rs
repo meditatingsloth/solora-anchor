@@ -59,7 +59,7 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     let both_sides_entered = event.up_amount > 0 && event.down_amount > 0;
 
     let mut earned_amount = if both_sides_entered &&
-        event.outcome == Outcome::Up || event.outcome == Outcome::Down {
+        (event.outcome == Outcome::Up || event.outcome == Outcome::Down) {
         let (winning_pool, losing_pool): (u128, u128);
 
         if event.outcome == Outcome::Up {
@@ -84,6 +84,8 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
         0
     };
 
+    msg!("earned_amount: {}", earned_amount);
+
     // Only take fees on earned amounts
     let fee = if earned_amount > 0 {
         earned_amount.checked_mul(event.fee_bps as u64)
@@ -93,6 +95,8 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     } else {
         0
     };
+
+    msg!("fee: {}", fee);
 
     if fee > 0 {
         earned_amount = earned_amount.checked_sub(fee).unwrap();
@@ -112,6 +116,8 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
         // User lost, does not get anything back
         0
     };
+
+    msg!("amount_to_user: {}", amount_to_user);
 
     if amount_to_user > 0 {
         if is_native {
