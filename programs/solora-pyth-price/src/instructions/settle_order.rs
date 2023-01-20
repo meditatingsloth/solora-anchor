@@ -56,8 +56,10 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     let is_native = is_native_mint(event_config.currency_mint);
     let event = &ctx.accounts.event;
     let order = &ctx.accounts.order;
+    let both_sides_entered = event.up_amount > 0 && event.down_amount > 0;
 
-    let mut earned_amount = if event.outcome == Outcome::Up || event.outcome == Outcome::Down {
+    let mut earned_amount = if both_sides_entered &&
+        event.outcome == Outcome::Up || event.outcome == Outcome::Down {
         let (winning_pool, losing_pool): (u128, u128);
 
         if event.outcome == Outcome::Up {
@@ -78,7 +80,7 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
             .checked_div(winning_pool)
             .ok_or(Error::OverflowError)? as u64
     } else {
-        // Nothing earned if outcome wasn't up or down
+        // Nothing earned if only one-sided bets or outcome wasn't up or down
         0
     };
 
@@ -97,7 +99,10 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     }
 
     let user_won = event.outcome == order.outcome;
-    let amount_to_user = if user_won {
+    let amount_to_user = if !both_sides_entered {
+        // User gets their original amount back if only one side had bets
+        order.amount
+    } else if user_won {
         // User gets their original amount back plus their earnings if they won
         earned_amount.checked_add(order.amount).unwrap()
     } else if event.outcome != Outcome::Up && event.outcome != Outcome::Down {
