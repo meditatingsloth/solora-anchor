@@ -62,6 +62,12 @@ pub mod solora_pyth_price {
         instructions::settle_event(ctx)
     }
 
+    pub fn settle_expired_event<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettleExpiredEvent<'info>>,
+    ) -> Result<()> {
+        instructions::settle_expired_event(ctx)
+    }
+
     pub fn close_accounts<'info>(
         ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info>>,
     ) -> Result<()> {

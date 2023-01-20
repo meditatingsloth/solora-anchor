@@ -53,4 +53,6 @@ pub enum Error {
     /// 20
     #[msg("The event has not started")]
     EventNotStarted,
+    #[msg("The event has not expired")]
+    EventNotExpired,
 }

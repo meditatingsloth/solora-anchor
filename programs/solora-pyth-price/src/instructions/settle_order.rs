@@ -58,19 +58,16 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     let order = &ctx.accounts.order;
     let both_sides_entered = event.up_amount > 0 && event.down_amount > 0;
 
-    let mut earned_amount = if both_sides_entered &&
+    let earned_amount = if both_sides_entered &&
         (event.outcome == Outcome::Up || event.outcome == Outcome::Down) {
         let (winning_pool, losing_pool): (u128, u128);
 
         if event.outcome == Outcome::Up {
             winning_pool = event.up_amount;
             losing_pool = event.down_amount;
-        } else if event.outcome == Outcome::Down {
+        } else {
             winning_pool = event.down_amount;
             losing_pool = event.up_amount;
-        } else {
-            winning_pool = event.up_amount + event.down_amount;
-            losing_pool = 0;
         }
 
         // Divide the losing pool by winning for earnings multiplier
@@ -88,19 +85,16 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
 
     // Only take fees on earned amounts
     let fee = if earned_amount > 0 {
-        earned_amount.checked_mul(event.fee_bps as u64)
+        (earned_amount as u128)
+            .checked_mul(event.fee_bps as u128)
             .ok_or(Error::OverflowError)?
             .checked_div(10000)
-            .ok_or(Error::OverflowError)?
+            .ok_or(Error::OverflowError)? as u64
     } else {
         0
     };
 
     msg!("fee: {}", fee);
-
-    if fee > 0 {
-        earned_amount = earned_amount.checked_sub(fee).unwrap();
-    }
 
     let user_won = event.outcome == order.outcome;
     let amount_to_user = if !both_sides_entered {
@@ -108,8 +102,13 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
         order.amount
     } else if user_won {
         // User gets their original amount back plus their earnings if they won
-        earned_amount.checked_add(order.amount).unwrap()
-    } else if event.outcome != Outcome::Up && event.outcome != Outcome::Down {
+        earned_amount
+            .checked_sub(fee)
+            .ok_or(Error::OverflowError)?
+            .checked_add(order.amount)
+            .ok_or(Error::OverflowError)?
+    } else if event.outcome != Outcome::Up &&
+        event.outcome != Outcome::Down {
         // User gets their original amount back if event was invalid or cancelled
         order.amount
     } else {
