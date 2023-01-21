@@ -60,6 +60,10 @@ pub fn create_order<'info>(
         return err!(Error::EventLocked);
     }
 
+    if amount == 0 {
+        return err!(Error::ZeroAmount);
+    }
+
     if outcome != Outcome::Up &&
         outcome != Outcome::Down {
         return err!(Error::InvalidOutcome);

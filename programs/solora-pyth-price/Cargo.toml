@@ -26,7 +26,3 @@ spl-associated-token-account = {version = "^1.0.5", features = ["no-entrypoint"]
 pyth-sdk-solana = "0.7.0"
 clockwork-sdk = { version = "1.4.0" }
 chrono = { version = "0.4.23", default-features = false, features = ["alloc"] }
-
-[dev-dependencies]
-proptest = "1.0"
-roots = "0.0.7"

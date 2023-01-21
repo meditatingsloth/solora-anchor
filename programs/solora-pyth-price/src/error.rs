@@ -55,4 +55,8 @@ pub enum Error {
     EventNotStarted,
     #[msg("The event has not expired")]
     EventNotExpired,
+    #[msg("Zero amount")]
+    ZeroAmount,
+    #[msg("Invalid fee")]
+    InvalidFee,
 }

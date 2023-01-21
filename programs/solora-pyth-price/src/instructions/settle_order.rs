@@ -56,66 +56,29 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     let is_native = is_native_mint(event_config.currency_mint);
     let event = &ctx.accounts.event;
     let order = &ctx.accounts.order;
-    let both_sides_entered = event.up_amount > 0 && event.down_amount > 0;
 
-    let earned_amount = if both_sides_entered &&
-        (event.outcome == Outcome::Up || event.outcome == Outcome::Down) {
-        let (winning_pool, losing_pool): (u128, u128);
-
-        if event.outcome == Outcome::Up {
-            winning_pool = event.up_amount;
-            losing_pool = event.down_amount;
-        } else {
-            winning_pool = event.down_amount;
-            losing_pool = event.up_amount;
-        }
-
-        // Divide the losing pool by winning for earnings multiplier
-        (order.amount as u128)
-            .checked_mul(losing_pool)
-            .ok_or(Error::OverflowError)?
-            .checked_div(winning_pool)
-            .ok_or(Error::OverflowError)? as u64
-    } else {
-        // Nothing earned if only one-sided bets or outcome wasn't up or down
-        0
-    };
-
+    let earned_amount = get_earned_amount(
+        event.up_amount,
+        event.down_amount,
+        event.outcome,
+        order.amount,
+        order.outcome
+    )?;
     msg!("earned_amount: {}", earned_amount);
 
     // Only take fees on earned amounts
-    let fee = if earned_amount > 0 {
-        (earned_amount as u128)
-            .checked_mul(event.fee_bps as u128)
-            .ok_or(Error::OverflowError)?
-            .checked_div(10000)
-            .ok_or(Error::OverflowError)? as u64
-    } else {
-        0
-    };
-
+    let fee = get_fee(earned_amount, event.fee_bps)?;
     msg!("fee: {}", fee);
 
-    let user_won = event.outcome == order.outcome;
-    let amount_to_user = if !both_sides_entered {
-        // User gets their original amount back if only one side had bets
-        order.amount
-    } else if user_won {
-        // User gets their original amount back plus their earnings if they won
-        earned_amount
-            .checked_sub(fee)
-            .ok_or(Error::OverflowError)?
-            .checked_add(order.amount)
-            .ok_or(Error::OverflowError)?
-    } else if event.outcome != Outcome::Up &&
-        event.outcome != Outcome::Down {
-        // User gets their original amount back if event was invalid or cancelled
-        order.amount
-    } else {
-        // User lost, does not get anything back
-        0
-    };
-
+    let amount_to_user = get_amount_to_user(
+        event.outcome,
+        event.up_amount,
+        event.down_amount,
+        order.outcome,
+        order.amount,
+        earned_amount,
+        fee
+    )?;
     msg!("amount_to_user: {}", amount_to_user);
 
     if amount_to_user > 0 {
@@ -186,4 +149,341 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     event.orders_settled += 1;
 
     Ok(())
+}
+
+fn get_earned_amount(
+    up_amount: u128,
+    down_amount: u128,
+    event_outcome: Outcome,
+    order_amount: u64,
+    order_outcome: Outcome
+) -> Result<u64> {
+    if event_outcome != order_outcome {
+        return Ok(0)
+    }
+
+    // Nothing earned if only one side was entered
+    if up_amount == 0 || down_amount == 0 {
+        return Ok(0)
+    }
+
+    let (winning_pool, losing_pool): (u128, u128);
+
+    if event_outcome == Outcome::Up {
+        winning_pool = up_amount;
+        losing_pool = down_amount;
+    } else if event_outcome == Outcome::Down {
+        winning_pool = down_amount;
+        losing_pool = up_amount;
+    } else {
+        return Ok(0)
+    }
+
+    // Divide the losing pool by winning for earnings multiplier
+    Ok((order_amount as u128)
+        .checked_mul(losing_pool)
+        .ok_or(Error::OverflowError)?
+        .checked_div(winning_pool)
+        .ok_or(Error::OverflowError)? as u64)
+}
+
+fn get_fee(
+    earned_amount: u64,
+    fee_bps: u32
+) -> Result<u64> {
+    if earned_amount == 0 {
+        return Ok(0)
+    }
+
+    Ok((earned_amount as u128)
+        .checked_mul(fee_bps as u128)
+        .ok_or(Error::OverflowError)?
+        .checked_div(10000)
+        .ok_or(Error::OverflowError)? as u64)
+}
+
+fn get_amount_to_user(
+    event_outcome: Outcome,
+    up_amount: u128,
+    down_amount: u128,
+    order_outcome: Outcome,
+    order_amount: u64,
+    earned_amount: u64,
+    fee: u64
+) -> Result<u64> {
+    // Return the original amount if the event was invalid or same
+    if event_outcome == Outcome::Invalid || event_outcome == Outcome::Same {
+        return Ok(order_amount)
+    }
+
+    // Return the original amount if one side wasn't entered
+    if up_amount == 0 || down_amount == 0 {
+        return Ok(order_amount)
+    }
+
+    // Losers get nothing
+    if event_outcome != order_outcome {
+        return Ok(0)
+    }
+
+    // Winners get their original amount back plus their earnings minus fees
+    Ok(order_amount
+        .checked_add(earned_amount)
+        .ok_or(Error::OverflowError)?
+        .checked_sub(fee)
+        .ok_or(Error::OverflowError)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::instructions::settle_order::{get_amount_to_user, get_earned_amount, get_fee};
+    use crate::Outcome;
+
+    #[test]
+    fn earned_amount_up_only() {
+        let value = get_earned_amount(
+            100,
+            0,
+            Outcome::Up,
+            10,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn earned_amount_down_only() {
+        let value = get_earned_amount(
+            0,
+            100,
+            Outcome::Up,
+            10,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn earned_amount_same_outcome() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Same,
+            10,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn earned_amount_invalid_outcome() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Invalid,
+            10,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn earned_amount_order_outcome_incorrect() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Down,
+            10,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn earned_amount_win_all() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Up,
+            100,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(100, value);
+    }
+
+    #[test]
+    fn earned_amount_win_some() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Up,
+            50,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(50, value);
+    }
+
+    #[test]
+    fn earned_amount_win_down() {
+        let value = get_earned_amount(
+            100,
+            100,
+            Outcome::Down,
+            100,
+            Outcome::Down
+        ).unwrap();
+        assert_eq!(100, value);
+    }
+
+    #[test]
+    fn earned_amount_win_all_uneven_pool_up() {
+        let value = get_earned_amount(
+            200,
+            100,
+            Outcome::Up,
+            100,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(50, value);
+    }
+
+    #[test]
+    fn earned_amount_win_all_uneven_pool_down() {
+        let value = get_earned_amount(
+            100,
+            200,
+            Outcome::Up,
+            100,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(200, value);
+    }
+
+    #[test]
+    fn earned_amount_win_all_partial_uneven_pool_down() {
+        let value = get_earned_amount(
+            100,
+            200,
+            Outcome::Up,
+            50,
+            Outcome::Up
+        ).unwrap();
+        assert_eq!(100, value);
+    }
+
+    #[test]
+    fn fees_zero() {
+        let value = get_fee(0, 100).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn fees_valid() {
+        let value = get_fee(100, 100).unwrap();
+        assert_eq!(1, value);
+    }
+
+    #[test]
+    fn fees_full() {
+        let value = get_fee(100, 10000).unwrap();
+        assert_eq!(100, value);
+    }
+
+    #[test]
+    fn amount_to_user_invalid() {
+        let value = get_amount_to_user(
+            Outcome::Invalid,
+            100,
+            100,
+            Outcome::Up,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(10, value);
+    }
+
+    #[test]
+    fn amount_to_user_same() {
+        let value = get_amount_to_user(
+            Outcome::Same,
+            100,
+            100,
+            Outcome::Up,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(10, value);
+    }
+
+    #[test]
+    fn amount_to_user_one_sided() {
+        let value = get_amount_to_user(
+            Outcome::Down,
+            0,
+            100,
+            Outcome::Down,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(10, value);
+    }
+
+    #[test]
+    fn amount_to_user_lose() {
+        let value = get_amount_to_user(
+            Outcome::Down,
+            100,
+            100,
+            Outcome::Up,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn amount_to_user_lose_down() {
+        let value = get_amount_to_user(
+            Outcome::Up,
+            100,
+            100,
+            Outcome::Down,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(0, value);
+    }
+
+    #[test]
+    fn amount_to_user_win() {
+        let value = get_amount_to_user(
+            Outcome::Down,
+            100,
+            100,
+            Outcome::Down,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(13, value);
+    }
+
+    #[test]
+    fn amount_to_user_win_up() {
+        let value = get_amount_to_user(
+            Outcome::Up,
+            100,
+            100,
+            Outcome::Up,
+            10,
+            5,
+            2
+        ).unwrap();
+        assert_eq!(13, value);
+    }
 }

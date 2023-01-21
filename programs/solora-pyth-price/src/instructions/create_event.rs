@@ -82,6 +82,10 @@ pub fn create_event<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
     fee_bps: u32,
 ) -> Result<()> {
+    if fee_bps > 10000 {
+        return err!(Error::InvalidFee)
+    }
+
     let timestamp = Clock::get()?.unix_timestamp;
     let authority = &ctx.accounts.authority;
     let lock_thread = &ctx.accounts.lock_thread;
