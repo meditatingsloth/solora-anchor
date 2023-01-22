@@ -69,18 +69,18 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
             msg!("No price found");
             event.outcome = Outcome::Invalid;
         }
-
-        emit!(EventLocked {
-            event_config: event.event_config,
-            event: event.key(),
-            lock_price: event.lock_price,
-            up_amount: event.up_amount,
-            down_amount: event.down_amount,
-            up_count: event.up_count,
-            down_count: event.down_count,
-            outcome: event.outcome
-        });
     }
+
+    emit!(EventLocked {
+        event_config: event.event_config,
+        event: event.key(),
+        lock_price: event.lock_price,
+        up_amount: event.up_amount,
+        down_amount: event.down_amount,
+        up_count: event.up_count,
+        down_count: event.down_count,
+        outcome: event.outcome
+    });
 
     Ok(())
 }
