@@ -134,8 +134,7 @@ pub fn create_event<'info>(
         accounts: vec![
             AccountMeta::new_readonly(event_config.key(), false),
             AccountMeta::new(event.key(), false),
-            AccountMeta::new_readonly(event_config.pyth_feed, false),
-            AccountMeta::new(lock_thread.key(), true),
+            AccountMeta::new_readonly(event_config.pyth_feed, false)
         ],
         data: clockwork_sdk::utils::anchor_sighash("set_lock_price").into(),
     };
@@ -196,8 +195,7 @@ pub fn create_event<'info>(
         accounts: vec![
             AccountMeta::new(event_config.key(), false),
             AccountMeta::new(event.key(), false),
-            AccountMeta::new_readonly(event_config.pyth_feed, false),
-            AccountMeta::new(settle_thread.key(), true),
+            AccountMeta::new_readonly(event_config.pyth_feed, false)
         ],
         data: clockwork_sdk::utils::anchor_sighash("settle_event").into(),
     };

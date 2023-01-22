@@ -28,7 +28,6 @@ pub struct SetLockPrice<'info> {
         ],
         bump = event.bump[0],
         has_one = event_config,
-        has_one = lock_thread,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
         constraint = event.lock_price == 0 @ Error::LockPriceSet,
     )]
@@ -36,13 +35,6 @@ pub struct SetLockPrice<'info> {
 
     /// CHECK: Safe due to event_config constraint
     pub pyth_feed: UncheckedAccount<'info>,
-
-    #[account(
-        signer,
-        constraint = lock_thread.id.eq("event_lock"),
-        constraint = lock_thread.authority == event.key()
-    )]
-    pub lock_thread: Account<'info, Thread>,
 }
 
 pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>>) -> Result<()> {
@@ -53,40 +45,42 @@ pub fn set_lock_price<'info>(ctx: Context<'_, '_, '_, 'info, SetLockPrice<'info>
         return err!(Error::EventNotLocked);
     }
 
-    // TODO: Delete lock thread when possible to delete from thread call
-
-    let price_feed =
-        load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
-    let price = price_feed.get_price_no_older_than(timestamp, 30);
-
-    // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
-    if price.is_some() {
-        let price = price.unwrap();
-        if price.price < 0 {
-            msg!("Negative price: {}", price.price);
-            event.outcome = Outcome::Invalid;
-        } else {
-            event.lock_price = get_price_with_decimal_change(
-                price.price,
-                price.expo,
-                event.price_decimals
-            )?;
-        }
-    } else {
-        msg!("No price found");
+    if timestamp - event.lock_time > 15 {
+        msg!("Locking period expired: {} {}", timestamp, event.lock_time);
         event.outcome = Outcome::Invalid;
-    }
+    } else {
+        // TODO: Delete lock thread when possible to delete from thread call
 
-    emit!(EventLocked {
-        event_config: event.event_config,
-        event: event.key(),
-        lock_price: event.lock_price,
-        up_amount: event.up_amount,
-        down_amount: event.down_amount,
-        up_count: event.up_count,
-        down_count: event.down_count,
-        outcome: event.outcome
-    });
+        let price_feed =
+            load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
+        let price = price_feed.get_price_no_older_than(timestamp, 30);
+
+        // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
+        if price.is_some() {
+            let price = price.unwrap();
+            if price.price < 0 {
+                msg!("Negative price: {}", price.price);
+                event.outcome = Outcome::Invalid;
+            } else {
+                event.lock_price =
+                    get_price_with_decimal_change(price.price, price.expo, event.price_decimals)?;
+            }
+        } else {
+            msg!("No price found");
+            event.outcome = Outcome::Invalid;
+        }
+
+        emit!(EventLocked {
+            event_config: event.event_config,
+            event: event.key(),
+            lock_price: event.lock_price,
+            up_amount: event.up_amount,
+            down_amount: event.down_amount,
+            up_count: event.up_count,
+            down_count: event.down_count,
+            outcome: event.outcome
+        });
+    }
 
     Ok(())
 }
@@ -100,5 +94,5 @@ pub struct EventLocked {
     pub down_amount: u128,
     pub up_count: u32,
     pub down_count: u32,
-    pub outcome: Outcome
+    pub outcome: Outcome,
 }

@@ -27,21 +27,13 @@ pub struct SettleEvent<'info> {
             &event.start_time.to_le_bytes()
         ],
         bump = event.bump[0],
-        has_one = settle_thread,
         constraint = event.outcome == Outcome::Undrawn @ Error::EventSettled,
         constraint = event.lock_price > 0 @ Error::LockPriceNotSet,
     )]
     pub event: Box<Account<'info, Event>>,
 
     /// CHECK: Safe due to event_config constraint
-    pub pyth_feed: UncheckedAccount<'info>,
-
-    #[account(
-        signer,
-        constraint = settle_thread.id.eq("event_settle"),
-        constraint = settle_thread.authority == event.key()
-    )]
-    pub settle_thread: Account<'info, Thread>,
+    pub pyth_feed: UncheckedAccount<'info>
 }
 
 pub fn settle_event<'info>(
