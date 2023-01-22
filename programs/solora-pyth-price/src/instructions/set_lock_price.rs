@@ -2,7 +2,6 @@ use crate::error::Error;
 use crate::state::{Event, EventConfig, Outcome};
 use crate::util::get_price_with_decimal_change;
 use anchor_lang::prelude::*;
-use clockwork_sdk::state::Thread;
 use pyth_sdk_solana::load_price_feed_from_account_info;
 
 #[derive(Accounts)]

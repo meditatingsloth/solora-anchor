@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use clockwork_sdk::state::{Thread};
 use pyth_sdk_solana::load_price_feed_from_account_info;
 use crate::state::{Event, EventConfig, Outcome};
 use crate::error::Error;
@@ -46,35 +45,40 @@ pub fn settle_event<'info>(
         return err!(Error::EventInWaitingPeriod);
     }
 
-    // TODO: Delete settle thread when possible to delete from thread call
-
-    let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
-    let price = price_feed.get_price_no_older_than(timestamp, 30);
-
-    // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
-    if price.is_some() {
-        let price = price.unwrap();
-        if price.price < 0 {
-            msg!("Negative price: {}", price.price);
-            event.outcome = Outcome::Invalid;
-        } else {
-            event.settle_price = get_price_with_decimal_change(
-                price.price,
-                price.expo,
-                event.price_decimals
-            )?;
-
-            event.outcome = if event.settle_price == event.lock_price {
-                Outcome::Same
-            } else if event.settle_price > event.lock_price {
-                Outcome::Up
-            } else {
-                Outcome::Down
-            };
-        }
-    } else {
-        msg!("No price found");
+    if timestamp - (event.lock_time + event.wait_period as i64) > 15 {
+        msg!("Settle period expired: {} {}", timestamp, event.lock_time);
         event.outcome = Outcome::Invalid;
+    } else {
+        // TODO: Delete settle thread when possible to delete from thread call
+
+        let price_feed = load_price_feed_from_account_info(&ctx.accounts.pyth_feed.to_account_info()).unwrap();
+        let price = price_feed.get_price_no_older_than(timestamp, 30);
+
+        // Users will need to be able to withdraw funds if the price feed is not available, so set invalid outcome
+        if price.is_some() {
+            let price = price.unwrap();
+            if price.price < 0 {
+                msg!("Negative price: {}", price.price);
+                event.outcome = Outcome::Invalid;
+            } else {
+                event.settle_price = get_price_with_decimal_change(
+                    price.price,
+                    price.expo,
+                    event.price_decimals
+                )?;
+
+                event.outcome = if event.settle_price == event.lock_price {
+                    Outcome::Same
+                } else if event.settle_price > event.lock_price {
+                    Outcome::Up
+                } else {
+                    Outcome::Down
+                };
+            }
+        } else {
+            msg!("No price found");
+            event.outcome = Outcome::Invalid;
+        }
     }
 
     emit!(EventSettled {
