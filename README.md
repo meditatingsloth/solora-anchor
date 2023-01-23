@@ -15,3 +15,5 @@ To play, users predict whether the price of the asset from the configured Pyth o
 ### Program Address:
 devnet/mainnet: `SPPq79wtPSBeFvYJbSxS9Pj1JdbQARDWxwJBXyTVcRg`
 
+## Note
+The `solora-order-book` program is a work in progress and is not yet ready for use. This program allows users to place bets with odds that can be accepted by others in a P2P fashion.
