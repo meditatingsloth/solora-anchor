@@ -1,7 +1,8 @@
 use crate::error::Error;
 use crate::state::{Event, EventConfig, Outcome};
 use anchor_lang::prelude::*;
-use anchor_spl::token::TokenAccount;
+use anchor_spl::token;
+use anchor_spl::token::{CloseAccount, TokenAccount};
 use clockwork_sdk::{
     ID as thread_program_ID,
     cpi::{
@@ -102,12 +103,12 @@ pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info
             let remaining_accounts = &mut ctx.remaining_accounts.iter();
             let currency_mint = next_account_info(remaining_accounts)?;
             let event_currency_account = next_account_info(remaining_accounts)?;
+            let authority_currency_account = next_account_info(remaining_accounts)?;
+            let token_program = next_account_info(remaining_accounts)?;
 
             let token_account =
                 Account::<'info, TokenAccount>::try_from(event_currency_account)?;
             if token_account.amount > 0 {
-                let authority_currency_account = next_account_info(remaining_accounts)?;
-                let token_program = next_account_info(remaining_accounts)?;
                 let ata_program = next_account_info(remaining_accounts)?;
                 let rent = next_account_info(remaining_accounts)?;
 
@@ -131,7 +132,17 @@ pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info
                 )?;
             }
 
-            token_account.close(ctx.accounts.authority.to_account_info())?;
+            token::close_account(
+                CpiContext::new_with_signer(
+                    token_program.to_account_info(),
+                    CloseAccount {
+                        account: token_account.to_account_info(),
+                        destination: ctx.accounts.authority.to_account_info(),
+                        authority: event.to_account_info(),
+                    },
+                    &[&auth_seeds]
+                )
+            )?;
         }
 
         event.close(ctx.accounts.authority.to_account_info())?;

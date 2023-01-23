@@ -131,17 +131,16 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
                 if event.fee_burn_bps > 0 {
                     let fee_burn_amount = get_bps_amount(fee, event.fee_burn_bps)?;
                     if fee_burn_amount > 0 {
-                        let burn_cpi = CpiContext::new(
-                            token_program.to_account_info(),
-                            Burn {
-                                mint: currency_mint.to_account_info(),
-                                authority: ctx.accounts.event.to_account_info(),
-                                from: event_currency_account.to_account_info()
-                            }
-                        );
-
                         token::burn(
-                            burn_cpi,
+                            CpiContext::new_with_signer(
+                                token_program.to_account_info(),
+                                Burn {
+                                    mint: currency_mint.to_account_info(),
+                                    authority: ctx.accounts.event.to_account_info(),
+                                    from: event_currency_account.to_account_info()
+                                },
+                                &[&auth_seeds]
+                            ),
                             fee_burn_amount
                         )?;
 
@@ -149,21 +148,23 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
                     }
                 }
 
-                transfer(
-                    &ctx.accounts.event.to_account_info(),
-                    &ctx.accounts.fee_account.to_account_info(),
-                    event_currency_account.into(),
-                    fee_currency_account.into(),
-                    currency_mint.into(),
-                    Option::from(&ctx.accounts.authority.to_account_info()),
-                    ata_program.into(),
-                    token_program.into(),
-                    &ctx.accounts.system_program.to_account_info(),
-                    Option::from(&ctx.accounts.rent.to_account_info()),
-                    Some(&auth_seeds),
-                    None,
-                    fee,
-                )?;
+                if fee > 0 {
+                    transfer(
+                        &ctx.accounts.event.to_account_info(),
+                        &ctx.accounts.fee_account.to_account_info(),
+                        event_currency_account.into(),
+                        fee_currency_account.into(),
+                        currency_mint.into(),
+                        Option::from(&ctx.accounts.authority.to_account_info()),
+                        ata_program.into(),
+                        token_program.into(),
+                        &ctx.accounts.system_program.to_account_info(),
+                        Option::from(&ctx.accounts.rent.to_account_info()),
+                        Some(&auth_seeds),
+                        None,
+                        fee,
+                    )?;
+                }
             }
         }
     }

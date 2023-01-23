@@ -124,6 +124,7 @@ pub fn create_event<'info>(
     event.settle_thread = ctx.accounts.settle_thread.key();
     event.fee_account = ctx.accounts.fee_account.key();
     event.fee_bps = fee_bps;
+    event.fee_burn_bps = fee_burn_bps;
     event.start_time = current_event_start;
     event.lock_time = lock_time;
     event.wait_period = wait_period;
@@ -337,6 +338,7 @@ pub fn create_event<'info>(
         pyth_feed: event_config.pyth_feed,
         price_decimals: event.price_decimals,
         fee_bps,
+        fee_burn_bps,
         fee_account: event.fee_account,
         start_time: event.start_time,
         lock_time,
@@ -356,6 +358,7 @@ pub struct EventCreated {
     pub pyth_feed: Pubkey,
     pub price_decimals: u8,
     pub fee_bps: u32,
+    pub fee_burn_bps: u32,
     pub fee_account: Pubkey,
     pub start_time: i64,
     pub lock_time: i64,
