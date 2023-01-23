@@ -13,7 +13,14 @@ import {
 import moment from "moment";
 import {mockOracle} from "./pythHelpers";
 
-describe("solora-pyth-price", async () => {
+/**
+ * TODO: These tests are outdated from before Pyth/Clockwork was introduced. To run tests
+ * with pyth/clockwork integration 2 things need to be done:
+ * 1. Update pythHelpers with serialization/deserialization of Pyth 0.7.0 structs
+ * 2. Run clockwork locally before running tests
+ */
+
+describe("solora-pyth-price", () => {
 
 	const provider = anchor.AnchorProvider.env()
 	provider.opts.skipPreflight = true
