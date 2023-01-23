@@ -150,14 +150,12 @@ pub fn create_event<'info>(
             )?;
         } else {
             let remaining_accounts = &mut ctx.remaining_accounts.iter();
-            let currency_mint = next_account_info(remaining_accounts)?;
             let event_currency_account = next_account_info(remaining_accounts)?;
             let authority_currency_account = next_account_info(remaining_accounts)?;
             let token_program = next_account_info(remaining_accounts)?;
             let ata_program = next_account_info(remaining_accounts)?;
-            let rent = next_account_info(remaining_accounts)?;
 
-            if event_config.currency_mint != currency_mint.key() {
+            if event_config.currency_mint != ctx.accounts.currency_mint.key() {
                 return err!(Error::InvalidMint);
             }
 
@@ -166,12 +164,12 @@ pub fn create_event<'info>(
                 &event_clone,
                 authority_currency_account.into(),
                 event_currency_account.into(),
-                currency_mint.into(),
+                Option::from(&ctx.accounts.currency_mint.to_account_info()),
                 Option::from(&ctx.accounts.authority.to_account_info()),
                 ata_program.into(),
                 token_program.into(),
                 &ctx.accounts.system_program.to_account_info(),
-                rent.into(),
+                Option::from(&ctx.accounts.rent.to_account_info()),
                 None,
                 None,
                 initial_liquidity,

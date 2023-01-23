@@ -106,7 +106,6 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
             let fee_currency_account = next_account_info(remaining_accounts)?;
             let token_program = next_account_info(remaining_accounts)?;
             let ata_program = next_account_info(remaining_accounts)?;
-            let rent = next_account_info(remaining_accounts)?;
 
             let start_time_bytes = &event.start_time.to_le_bytes();
             let auth_seeds = event.auth_seeds(start_time_bytes);
@@ -121,7 +120,7 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
                 ata_program.into(),
                 token_program.into(),
                 &ctx.accounts.system_program.to_account_info(),
-                rent.into(),
+                Option::from(&ctx.accounts.rent.to_account_info()),
                 Some(&auth_seeds),
                 None,
                 amount_to_user
@@ -160,7 +159,7 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
                     ata_program.into(),
                     token_program.into(),
                     &ctx.accounts.system_program.to_account_info(),
-                    rent.into(),
+                    Option::from(&ctx.accounts.rent.to_account_info()),
                     Some(&auth_seeds),
                     None,
                     fee,
