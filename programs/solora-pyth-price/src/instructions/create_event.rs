@@ -82,9 +82,14 @@ pub fn create_event<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
     fee_bps: u32,
     initial_liquidity: u64,
+    fee_burn_bps: u32,
 ) -> Result<()> {
     if fee_bps > 10_000 {
         return err!(Error::InvalidFee)
+    }
+
+    if fee_burn_bps > 10_000 {
+        return err!(Error::InvalidFeeBurn)
     }
 
     let timestamp = Clock::get()?.unix_timestamp;

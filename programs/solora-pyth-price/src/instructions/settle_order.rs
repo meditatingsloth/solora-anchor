@@ -2,6 +2,8 @@ use crate::error::Error;
 use crate::state::{Event, EventConfig, Order, Outcome};
 use crate::util::{is_native_mint, transfer, transfer_sol_pda};
 use anchor_lang::prelude::*;
+use anchor_spl::token;
+use anchor_spl::token::Burn;
 
 #[derive(Accounts)]
 pub struct SettleOrder<'info> {
@@ -67,7 +69,7 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
     msg!("earned_amount: {}", earned_amount);
 
     // Only take fees on earned amounts
-    let fee = get_fee(earned_amount, event.fee_bps)?;
+    let mut fee = get_bps_amount(earned_amount, event.fee_bps)?;
     msg!("fee: {}", fee);
 
     let amount_to_user = get_amount_to_user(
@@ -126,6 +128,28 @@ pub fn settle_order<'info>(ctx: Context<'_, '_, '_, 'info, SettleOrder<'info>>) 
             )?;
 
             if fee > 0 {
+                // Burn fees if needed
+                if event.fee_burn_bps > 0 {
+                    let fee_burn_amount = get_bps_amount(fee, event.fee_burn_bps)?;
+                    if fee_burn_amount > 0 {
+                        let burn_cpi = CpiContext::new(
+                            token_program.to_account_info(),
+                            Burn {
+                                mint: currency_mint.to_account_info(),
+                                authority: ctx.accounts.event.to_account_info(),
+                                from: event_currency_account.to_account_info()
+                            }
+                        );
+
+                        token::burn(
+                            burn_cpi,
+                            fee_burn_amount
+                        )?;
+
+                        fee = fee.checked_sub(fee_burn_amount).unwrap();
+                    }
+                }
+
                 transfer(
                     &ctx.accounts.event.to_account_info(),
                     &ctx.accounts.fee_account.to_account_info(),
@@ -187,16 +211,16 @@ fn get_earned_amount(
         .ok_or(Error::OverflowError)? as u64)
 }
 
-fn get_fee(
-    earned_amount: u64,
-    fee_bps: u32
+fn get_bps_amount(
+    amount: u64,
+    bps: u32
 ) -> Result<u64> {
-    if earned_amount == 0 {
+    if amount == 0 {
         return Ok(0)
     }
 
-    Ok((earned_amount as u128)
-        .checked_mul(fee_bps as u128)
+    Ok((amount as u128)
+        .checked_mul(bps as u128)
         .ok_or(Error::OverflowError)?
         .checked_div(10000)
         .ok_or(Error::OverflowError)? as u64)
@@ -236,7 +260,7 @@ fn get_amount_to_user(
 
 #[cfg(test)]
 mod tests {
-    use crate::instructions::settle_order::{get_amount_to_user, get_earned_amount, get_fee};
+    use crate::instructions::settle_order::{get_amount_to_user, get_earned_amount, get_bps_amount};
     use crate::Outcome;
 
     #[test]
@@ -373,19 +397,19 @@ mod tests {
 
     #[test]
     fn fees_zero() {
-        let value = get_fee(0, 100).unwrap();
+        let value = get_bps_amount(0, 100).unwrap();
         assert_eq!(0, value);
     }
 
     #[test]
     fn fees_valid() {
-        let value = get_fee(100, 100).unwrap();
+        let value = get_bps_amount(100, 100).unwrap();
         assert_eq!(1, value);
     }
 
     #[test]
     fn fees_full() {
-        let value = get_fee(100, 10000).unwrap();
+        let value = get_bps_amount(100, 10000).unwrap();
         assert_eq!(100, value);
     }
 

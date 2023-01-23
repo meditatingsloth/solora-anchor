@@ -1,6 +1,7 @@
 use crate::error::Error;
 use crate::state::{Event, EventConfig, Outcome};
 use anchor_lang::prelude::*;
+use anchor_spl::token::TokenAccount;
 use clockwork_sdk::{
     ID as thread_program_ID,
     cpi::{
@@ -9,6 +10,7 @@ use clockwork_sdk::{
     },
     ThreadProgram,
 };
+use crate::util::{is_native_mint, transfer};
 
 #[derive(Accounts)]
 pub struct CloseAccounts<'info> {
@@ -53,10 +55,13 @@ pub struct CloseAccounts<'info> {
 
     #[account(address = thread_program_ID)]
     pub clockwork: Program<'info, ThreadProgram>,
+
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info>>) -> Result<()> {
-    let event = &mut ctx.accounts.event;
+    let event = &ctx.accounts.event;
 
     let timestamp = Clock::get()?.unix_timestamp;
     if event.lock_time + event.wait_period as i64 > timestamp {
@@ -92,6 +97,43 @@ pub fn close_accounts<'info>(ctx: Context<'_, '_, '_, 'info, CloseAccounts<'info
 
     // Close the event if all orders have been settled
     if event.up_count + event.down_count == event.orders_settled {
+        // Empty/close the currency account as well if not using native mint
+        if !is_native_mint(ctx.accounts.event_config.currency_mint) {
+            let remaining_accounts = &mut ctx.remaining_accounts.iter();
+            let currency_mint = next_account_info(remaining_accounts)?;
+            let event_currency_account = next_account_info(remaining_accounts)?;
+
+            let token_account =
+                Account::<'info, TokenAccount>::try_from(event_currency_account)?;
+            if token_account.amount > 0 {
+                let authority_currency_account = next_account_info(remaining_accounts)?;
+                let token_program = next_account_info(remaining_accounts)?;
+                let ata_program = next_account_info(remaining_accounts)?;
+                let rent = next_account_info(remaining_accounts)?;
+
+                let start_time_bytes = &event.start_time.to_le_bytes();
+                let auth_seeds = event.auth_seeds(start_time_bytes);
+
+                transfer(
+                    &event.to_account_info(),
+                    &ctx.accounts.authority.to_account_info(),
+                    event_currency_account.into(),
+                    authority_currency_account.into(),
+                    currency_mint.into(),
+                    Option::from(&ctx.accounts.authority.to_account_info()),
+                    ata_program.into(),
+                    token_program.into(),
+                    &ctx.accounts.system_program.to_account_info(),
+                    rent.into(),
+                    Some(&auth_seeds),
+                    None,
+                    token_account.amount
+                )?;
+            }
+
+            token_account.close(ctx.accounts.authority.to_account_info())?;
+        }
+
         event.close(ctx.accounts.authority.to_account_info())?;
     }
 

@@ -5,7 +5,7 @@ use crate::state::outcome::Outcome;
 pub const EVENT_VERSION: u8 = 1;
 
 pub const EVENT_SIZE: usize =
-	8 + 1 + 1 + 32 + 32 + 32 + 32 + 4 + 8 + 8 + 4 + 8 + 8 + 2 + 16 + 16 + 4 + 4 + 1 + 4 + 256;
+	8 + 1 + 1 + 32 + 32 + 32 + 32 + 4 + 8 + 8 + 4 + 8 + 8 + 2 + 16 + 16 + 4 + 4 + 1 + 4 + 4 + 252;
 
 #[account]
 pub struct Event {
@@ -42,7 +42,9 @@ pub struct Event {
 	/// Number of decimals to consider for price changes
 	pub price_decimals: u8,
 	/// Number of orders settled. Once it reaches the up_count + down_count it's safe to close the event
-	pub orders_settled: u32
+	pub orders_settled: u32,
+	/// Amount in bps to burn from the fees received
+	pub fee_burn_bps: u32,
 }
 
 impl Event {

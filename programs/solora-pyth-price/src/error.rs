@@ -59,4 +59,6 @@ pub enum Error {
     ZeroAmount,
     #[msg("Invalid fee")]
     InvalidFee,
+    #[msg("Invalid fee burn")]
+    InvalidFeeBurn,
 }

@@ -20,7 +20,7 @@ pub struct EventConfig {
 	/// Number of seconds between start/lock/settle
 	pub interval_seconds: u32,
 	/// Unix timestamp of the next time an event should start for this config
-	pub next_event_start: i64
+	pub next_event_start: i64,
 }
 
 impl EventConfig {
