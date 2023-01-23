@@ -10,9 +10,11 @@ cp ./target/idl/${PROGRAM_NAME}.json ../solora-monorepo/packages/solora-ts/src/$
 solana program deploy -k ./keys/${DEPLOYER}.json ./target/deploy/$PROGRAM_NAME.so
 
 if [ "$1" = "idl-init" ]
+then
   anchor idl init ${PROGRAM} -f ./target/idl/$PROGRAM_NAME.json --provider.cluster mainnet --provider.wallet ./keys/${DEPLOYER}.json
 fi
 
 if [ "$1" = "idl-upgrade" ]
+then
   anchor idl upgrade ${PROGRAM} -f ./target/idl/$PROGRAM_NAME.json --provider.cluster mainnet --provider.wallet ./keys/${DEPLOYER}.json
 fi

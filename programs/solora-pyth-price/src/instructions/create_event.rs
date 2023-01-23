@@ -14,7 +14,7 @@ use pyth_sdk_solana::{load_price_feed_from_account_info, Price};
 use solana_program::instruction::Instruction;
 use crate::state::{Event, EVENT_SIZE, EVENT_VERSION, EventConfig, MAX_PRICE_DECIMALS, Outcome};
 use crate::error::Error;
-use crate::util::transfer;
+use crate::util::{is_native_mint, transfer, transfer_sol};
 
 #[derive(Accounts)]
 pub struct CreateEvent<'info> {
@@ -81,8 +81,9 @@ pub struct CreateEvent<'info> {
 pub fn create_event<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
     fee_bps: u32,
+    initial_liquidity: u64,
 ) -> Result<()> {
-    if fee_bps > 10000 {
+    if fee_bps > 10_000 {
         return err!(Error::InvalidFee)
     }
 
@@ -109,6 +110,7 @@ pub fn create_event<'info>(
     msg!("price.expo: {}", price.expo);
     let pyth_feed_decimals = (price.expo * -1) as u8;
 
+    let event_clone = ctx.accounts.event.to_account_info().clone();
     let event = &mut ctx.accounts.event;
     event.bump = [*ctx.bumps.get("event").unwrap()];
     event.version = EVENT_VERSION;
@@ -127,6 +129,50 @@ pub fn create_event<'info>(
     } else {
         pyth_feed_decimals
     };
+
+    if initial_liquidity > 0 {
+        let half_liquidity = initial_liquidity / 2;
+        event.up_amount = half_liquidity as u128;
+        event.down_amount = half_liquidity as u128;
+
+        if is_native_mint(event_config.currency_mint) {
+            transfer_sol(
+                &ctx.accounts.authority.to_account_info(),
+                &event.to_account_info(),
+                &ctx.accounts.system_program.to_account_info(),
+                None,
+                initial_liquidity,
+            )?;
+        } else {
+            let remaining_accounts = &mut ctx.remaining_accounts.iter();
+            let currency_mint = next_account_info(remaining_accounts)?;
+            let event_currency_account = next_account_info(remaining_accounts)?;
+            let authority_currency_account = next_account_info(remaining_accounts)?;
+            let token_program = next_account_info(remaining_accounts)?;
+            let ata_program = next_account_info(remaining_accounts)?;
+            let rent = next_account_info(remaining_accounts)?;
+
+            if event_config.currency_mint != currency_mint.key() {
+                return err!(Error::InvalidMint);
+            }
+
+            transfer(
+                &ctx.accounts.authority.to_account_info(),
+                &event_clone,
+                authority_currency_account.into(),
+                event_currency_account.into(),
+                currency_mint.into(),
+                Option::from(&ctx.accounts.authority.to_account_info()),
+                ata_program.into(),
+                token_program.into(),
+                &ctx.accounts.system_program.to_account_info(),
+                rent.into(),
+                None,
+                None,
+                initial_liquidity,
+            )?;
+        }
+    }
 
     // build set_lock_price ix
     let set_lock_price_ix = Instruction {
@@ -293,6 +339,8 @@ pub fn create_event<'info>(
         lock_time,
         wait_period,
         currency_mint: event_config.currency_mint,
+        up_amount: event.up_amount,
+        down_amount: event.down_amount
     });
     Ok(())
 }
@@ -309,5 +357,7 @@ pub struct EventCreated {
     pub start_time: i64,
     pub lock_time: i64,
     pub wait_period: u32,
-    pub currency_mint: Pubkey
+    pub currency_mint: Pubkey,
+    pub up_amount: u128,
+    pub down_amount: u128,
 }

@@ -87,12 +87,7 @@ pub fn create_order<'info>(
         event.down_count += 1;
     }
 
-    // If there are remaining_accounts populated we're using an alt currency mint
-    if ctx.remaining_accounts.len() == 0 {
-        if !is_native_mint(ctx.accounts.event_config.currency_mint) {
-            return err!(Error::InvalidMint);
-        }
-
+    if is_native_mint(ctx.accounts.event_config.currency_mint) {
         transfer_sol(
             &ctx.accounts.authority.to_account_info(),
             &event.to_account_info(),

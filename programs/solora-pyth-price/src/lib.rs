@@ -32,8 +32,9 @@ pub mod solora_pyth_price {
     pub fn create_event<'info>(
         ctx: Context<'_, '_, '_, 'info, CreateEvent<'info>>,
         fee_bps: u32,
+        initial_liquidity: u64,
     ) -> Result<()> {
-        instructions::create_event(ctx, fee_bps)
+        instructions::create_event(ctx, fee_bps, initial_liquidity)
     }
 
     pub fn set_lock_price<'info>(
